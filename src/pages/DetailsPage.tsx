@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { fetchDetails, fetchSeasonEpisodes, fetchVideos, MediaDetails, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
+import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
+import ContentRow from "@/components/ContentRow";
 import Navbar from "@/components/Navbar";
 import { Star, Clock, Calendar, Play, X, Youtube } from "lucide-react";
 
@@ -12,6 +13,7 @@ export default function DetailsPage() {
   const [loading, setLoading] = useState(true);
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [showTrailer, setShowTrailer] = useState(false);
+  const [similar, setSimilar] = useState<MediaItem[]>([]);
 
   useEffect(() => {
     if (!id || !type) return;
@@ -36,6 +38,10 @@ export default function DetailsPage() {
         || videos.find((v) => v.site === "YouTube");
       if (trailer) setTrailerKey(trailer.key);
     }).catch(console.error);
+
+    fetchSimilar(Number(id), type as "movie" | "tv")
+      .then(setSimilar)
+      .catch(console.error);
   }, [id, type]);
 
   const handleSeasonChange = (seasonNum: number) => {
@@ -269,6 +275,17 @@ export default function DetailsPage() {
           </div>
         )}
       </div>
+
+      {/* Similar Content */}
+      {similar.length > 0 && (
+        <div className="pb-12">
+          <ContentRow
+            title="🎯 Títulos Semelhantes"
+            items={similar}
+            mediaType={type === "movie" ? "filme" : "serie"}
+          />
+        </div>
+      )}
     </div>
   );
 }

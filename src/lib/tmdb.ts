@@ -150,6 +150,11 @@ export async function fetchVideos(id: number, type: "movie" | "tv"): Promise<Vid
   return data.results;
 }
 
+export async function fetchSimilar(id: number, type: "movie" | "tv"): Promise<MediaItem[]> {
+  const data = await tmdbFetch<{ results: MediaItem[] }>(`${type}/${id}/recommendations`);
+  return data.results.map((item) => ({ ...item, media_type: type }));
+}
+
 export async function searchMulti(
   query: string,
   page = 1
