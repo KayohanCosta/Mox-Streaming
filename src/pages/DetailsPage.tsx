@@ -1,0 +1,230 @@
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { fetchDetails, fetchSeasonEpisodes, MediaDetails, Episode, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
+import Navbar from "@/components/Navbar";
+import { Star, Clock, Calendar, Play } from "lucide-react";
+
+export default function DetailsPage() {
+  const { type, id } = useParams<{ type: string; id: string }>();
+  const [details, setDetails] = useState<MediaDetails | null>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id || !type) return;
+    setLoading(true);
+    fetchDetails(Number(id), type as "movie" | "tv")
+      .then((data) => {
+        setDetails(data);
+        if (type === "tv" && data.seasons?.length) {
+          const firstReal = data.seasons.find((s) => s.season_number > 0);
+          if (firstReal) {
+            setSelectedSeason(firstReal.season_number);
+            fetchSeasonEpisodes(Number(id), firstReal.season_number).then(setEpisodes);
+          }
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id, type]);
+
+  const handleSeasonChange = (seasonNum: number) => {
+    setSelectedSeason(seasonNum);
+    if (id) {
+      fetchSeasonEpisodes(Number(id), seasonNum).then(setEpisodes);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <div className="h-[70vh] bg-surface animate-shimmer bg-gradient-to-r from-surface via-surface-hover to-surface bg-[length:200%_100%]" />
+      </div>
+    );
+  }
+
+  if (!details) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Navbar />
+        <p className="text-muted-foreground">Conteúdo não encontrado</p>
+      </div>
+    );
+  }
+
+  const title = getTitle(details);
+  const year = getYear(details);
+  const rating = getRating(details);
+  const runtime = details.runtime || (details.episode_run_time?.[0] ?? 0);
+  const directors = details.credits.crew.filter((p) => p.job === "Director");
+  const cast = details.credits.cast.slice(0, 12);
+
+  const providers = details["watch/providers"]?.results?.BR;
+  const allProviders = [
+    ...(providers?.flatrate || []),
+    ...(providers?.rent || []),
+    ...(providers?.buy || []),
+  ];
+  const uniqueProviders = allProviders.filter(
+    (p, i, arr) => arr.findIndex((x) => x.provider_id === p.provider_id) === i
+  );
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      {/* Hero */}
+      <div className="relative h-[70vh] md:h-[80vh]">
+        <img
+          src={backdropUrl(details.backdrop_path)}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 gradient-hero" />
+        <div className="absolute inset-0 gradient-hero-bottom" />
+
+        <div className="absolute inset-0 flex items-end pb-16 md:pb-20">
+          <div className="px-4 md:px-12 max-w-3xl animate-fade-in">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-4 text-glow">{title}</h1>
+
+            <div className="flex flex-wrap items-center gap-3 text-sm mb-5">
+              <span className="flex items-center gap-1 text-rating font-semibold">
+                <Star className="w-4 h-4 fill-current" /> {rating}%
+              </span>
+              {year && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Calendar className="w-3.5 h-3.5" /> {year}
+                </span>
+              )}
+              {runtime > 0 && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" /> {runtime} min
+                </span>
+              )}
+            </div>
+
+            {details.genres?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-5">
+                {details.genres.map((g) => (
+                  <span key={g.id} className="px-3 py-1 bg-secondary rounded-full text-xs font-medium">
+                    {g.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {details.overview && (
+              <p className="text-sm md:text-base text-foreground/80 mb-6 line-clamp-4">{details.overview}</p>
+            )}
+
+            <button className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors">
+              <Play className="w-5 h-5 fill-current" /> Assistir Agora
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Info sections */}
+      <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-16 -mt-8 relative z-10">
+        {/* Directors */}
+        {directors.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-xs uppercase text-muted-foreground tracking-wider mb-1">Direção</h3>
+            <p className="text-sm">{directors.map((d) => d.name).join(", ")}</p>
+          </div>
+        )}
+
+        {/* Cast */}
+        {cast.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-xl font-bold mb-4">Elenco</h2>
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
+              {cast.map((actor) => (
+                <div key={actor.id} className="flex-shrink-0 w-24 text-center">
+                  <div className="w-20 h-20 mx-auto rounded-full overflow-hidden bg-surface mb-2">
+                    <img
+                      src={actor.profile_path ? posterUrl(actor.profile_path, "w185") : "/placeholder.svg"}
+                      alt={actor.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="text-xs font-medium truncate">{actor.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{actor.character}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Watch Providers */}
+        {uniqueProviders.length > 0 && (
+          <div className="mb-10">
+            <h2 className="text-xl font-bold mb-4">Onde Assistir</h2>
+            <div className="flex flex-wrap gap-3">
+              {uniqueProviders.map((p) => (
+                <div key={p.provider_id} className="bg-secondary rounded-lg p-2" title={p.provider_name}>
+                  <img
+                    src={`https://image.tmdb.org/t/p/w92${p.logo_path}`}
+                    alt={p.provider_name}
+                    className="w-10 h-10 rounded object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Seasons & Episodes (TV only) */}
+        {type === "tv" && details.seasons && details.seasons.length > 0 && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">Temporadas</h2>
+            <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-2">
+              {details.seasons
+                .filter((s) => s.season_number > 0)
+                .map((season) => (
+                  <button
+                    key={season.id}
+                    onClick={() => handleSeasonChange(season.season_number)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      selectedSeason === season.season_number
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground hover:bg-surface-hover"
+                    }`}
+                  >
+                    T{season.season_number}
+                  </button>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {episodes.map((ep) => (
+                <div key={ep.id} className="bg-card rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all">
+                  <div className="aspect-video relative bg-surface">
+                    <img
+                      src={ep.still_path ? posterUrl(ep.still_path, "w500") : "/placeholder.svg"}
+                      alt={ep.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Play className="w-10 h-10 text-primary fill-current" />
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-sm font-semibold truncate">
+                      E{ep.episode_number} - {ep.name}
+                    </h4>
+                    {ep.overview && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ep.overview}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
