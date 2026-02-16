@@ -131,6 +131,25 @@ export async function fetchSeasonEpisodes(tvId: number, seasonNumber: number): P
   return data.episodes;
 }
 
+export interface VideoResult {
+  id: string;
+  key: string;
+  name: string;
+  site: string;
+  type: string;
+}
+
+export async function fetchVideos(id: number, type: "movie" | "tv"): Promise<VideoResult[]> {
+  const data = await tmdbFetch<{ results: VideoResult[] }>(`${type}/${id}/videos`);
+  // Also try English if no PT results
+  if (!data.results.length) {
+    const enRes = await fetch(`${BASE_URL}${type}/${id}/videos?api_key=${TMDB_API_KEY}&language=en-US`);
+    const enData = await enRes.json();
+    return enData.results || [];
+  }
+  return data.results;
+}
+
 export async function searchMulti(
   query: string,
   page = 1

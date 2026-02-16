@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { fetchDetails, fetchSeasonEpisodes, MediaDetails, Episode, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
+import { fetchDetails, fetchSeasonEpisodes, fetchVideos, MediaDetails, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
 import Navbar from "@/components/Navbar";
-import { Star, Clock, Calendar, Play } from "lucide-react";
+import { Star, Clock, Calendar, Play, X, Youtube } from "lucide-react";
 
 export default function DetailsPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -10,6 +10,8 @@ export default function DetailsPage() {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [trailerKey, setTrailerKey] = useState<string | null>(null);
+  const [showTrailer, setShowTrailer] = useState(false);
 
   useEffect(() => {
     if (!id || !type) return;
@@ -27,6 +29,13 @@ export default function DetailsPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // Fetch trailer
+    fetchVideos(Number(id), type as "movie" | "tv").then((videos) => {
+      const trailer = videos.find((v) => v.site === "YouTube" && v.type === "Trailer")
+        || videos.find((v) => v.site === "YouTube");
+      if (trailer) setTrailerKey(trailer.key);
+    }).catch(console.error);
   }, [id, type]);
 
   const handleSeasonChange = (seasonNum: number) => {
@@ -119,12 +128,47 @@ export default function DetailsPage() {
               <p className="text-sm md:text-base text-foreground/80 mb-6 line-clamp-4">{details.overview}</p>
             )}
 
-            <button className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors">
-              <Play className="w-5 h-5 fill-current" /> Assistir Agora
-            </button>
+            <div className="flex gap-3">
+              <button className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors">
+                <Play className="w-5 h-5 fill-current" /> Assistir Agora
+              </button>
+              {trailerKey && (
+                <button
+                  onClick={() => setShowTrailer(true)}
+                  className="flex items-center gap-2 bg-secondary hover:bg-surface-hover text-foreground font-semibold px-6 py-3 rounded-lg transition-colors"
+                >
+                  <Youtube className="w-5 h-5" /> Trailer
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Trailer Modal */}
+      {showTrailer && trailerKey && (
+        <div
+          className="fixed inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setShowTrailer(false)}
+        >
+          <div className="relative w-full max-w-4xl aspect-video" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowTrailer(false)}
+              className="absolute -top-10 right-0 text-foreground/70 hover:text-foreground transition-colors"
+            >
+              <X className="w-7 h-7" />
+            </button>
+            <iframe
+              src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&rel=0`}
+              title="Trailer"
+              allow="autoplay; encrypted-media"
+              allowFullScreen
+              className="w-full h-full rounded-xl"
+            />
+          </div>
+        </div>
+      )}
+
 
       {/* Info sections */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-16 -mt-8 relative z-10">
