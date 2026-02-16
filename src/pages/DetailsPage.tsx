@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
 import ContentRow from "@/components/ContentRow";
@@ -14,10 +14,12 @@ export default function DetailsPage() {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id || !type) return;
     setLoading(true);
+    setPlayerUrl(null);
     fetchDetails(Number(id), type as "movie" | "tv")
       .then((data) => {
         setDetails(data);
@@ -32,7 +34,6 @@ export default function DetailsPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
 
-    // Fetch trailer
     fetchVideos(Number(id), type as "movie" | "tv").then((videos) => {
       const trailer = videos.find((v) => v.site === "YouTube" && v.type === "Trailer")
         || videos.find((v) => v.site === "YouTube");
@@ -50,6 +51,18 @@ export default function DetailsPage() {
       fetchSeasonEpisodes(Number(id), seasonNum).then(setEpisodes);
     }
   };
+
+  const watchMovie = useCallback(() => {
+    if (!id) return;
+    setPlayerUrl(`https://embed.warezcdn.net/filme/${id}`);
+  }, [id]);
+
+  const watchEpisode = useCallback((seasonNum: number, episodeNum: number) => {
+    if (!id) return;
+    setPlayerUrl(`https://embed.warezcdn.net/serie/${id}/${seasonNum}/${episodeNum}`);
+  }, [id]);
+
+  const closePlayer = () => setPlayerUrl(null);
 
   if (loading) {
     return (
@@ -89,6 +102,25 @@ export default function DetailsPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+
+      {/* Fullscreen Player */}
+      {playerUrl && (
+        <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
+          <iframe
+            src={playerUrl}
+            className="w-full h-full"
+            frameBorder="0"
+            allowFullScreen
+            sandbox="allow-scripts allow-same-origin allow-forms"
+          />
+          <button
+            onClick={closePlayer}
+            className="absolute top-4 right-4 bg-destructive hover:bg-destructive/80 text-destructive-foreground px-4 py-2 rounded-full font-semibold transition-colors z-10 flex items-center gap-2"
+          >
+            <X className="w-4 h-4" /> Fechar
+          </button>
+        </div>
+      )}
 
       {/* Hero */}
       <div className="relative h-[70vh] md:h-[80vh]">
@@ -135,9 +167,21 @@ export default function DetailsPage() {
             )}
 
             <div className="flex gap-3">
-              <button className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors">
-                <Play className="w-5 h-5 fill-current" /> Assistir Agora
-              </button>
+              {type === "movie" ? (
+                <button
+                  onClick={watchMovie}
+                  className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
+                >
+                  <Play className="w-5 h-5 fill-current" /> Assistir Agora
+                </button>
+              ) : (
+                <button
+                  onClick={() => episodes.length > 0 && watchEpisode(selectedSeason, episodes[0]?.episode_number || 1)}
+                  className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
+                >
+                  <Play className="w-5 h-5 fill-current" /> Assistir T{selectedSeason}E1
+                </button>
+              )}
               {trailerKey && (
                 <button
                   onClick={() => setShowTrailer(true)}
@@ -174,7 +218,6 @@ export default function DetailsPage() {
           </div>
         </div>
       )}
-
 
       {/* Info sections */}
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-16 -mt-8 relative z-10">
@@ -250,7 +293,11 @@ export default function DetailsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {episodes.map((ep) => (
-                <div key={ep.id} className="bg-card rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all">
+                <div
+                  key={ep.id}
+                  onClick={() => watchEpisode(selectedSeason, ep.episode_number)}
+                  className="bg-card rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+                >
                   <div className="aspect-video relative bg-surface">
                     <img
                       src={ep.still_path ? posterUrl(ep.still_path, "w500") : "/placeholder.svg"}
