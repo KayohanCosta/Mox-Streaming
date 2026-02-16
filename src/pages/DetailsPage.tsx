@@ -111,7 +111,8 @@ export default function DetailsPage() {
             className="w-full h-full"
             frameBorder="0"
             allowFullScreen
-            sandbox="allow-scripts allow-same-origin allow-forms"
+            allow="autoplay; encrypted-media; fullscreen"
+            referrerPolicy="origin"
           />
           <button
             onClick={closePlayer}
