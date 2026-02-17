@@ -170,7 +170,7 @@ export default function Top10Row({ items, isLoading }: Top10RowProps) {
                       {/* Right: trailer */}
                       <div className="flex-1 relative bg-black overflow-hidden">
                         <iframe
-                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&annotation=0`}
+                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&annotation=0&vq=hd1080`}
                           className="absolute w-[300%] h-[300%]"
                           style={{ top: "-100%", left: "-100%" }}
                           allow="autoplay; encrypted-media"
