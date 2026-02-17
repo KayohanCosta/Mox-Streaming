@@ -231,7 +231,7 @@ export default function TorrentPlayer({ contentTitle, year, type, season, episod
                 {stream.ptBr && (
                   <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                     <Volume2 className="w-3 h-3" />
-                    PT-BR/Dual
+                    🇧🇷 PT-BR/Dual
                   </span>
                 )}
               </div>

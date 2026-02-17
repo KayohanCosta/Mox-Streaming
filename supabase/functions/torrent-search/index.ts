@@ -53,42 +53,50 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const query = url.searchParams.get("q"); // search query (movie/show name)
-    const type = url.searchParams.get("type") || "movie"; // movie or tv
-    const imdbId = url.searchParams.get("imdb_id") || "";
+    const query = url.searchParams.get("q");
+    const type = url.searchParams.get("type") || "movie";
 
-    if (!query && !imdbId) {
+    if (!query) {
       return new Response(
-        JSON.stringify({ error: "Missing q or imdb_id parameter" }),
+        JSON.stringify({ error: "Missing q parameter" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Search on apibay.org (ThePirateBay API)
-    const searchQuery = query || imdbId;
-    const cat = type === "movie" ? "200" : "200"; // Video category
-    const apibayUrl = `https://apibay.org/q.php?q=${encodeURIComponent(searchQuery)}&cat=${cat}`;
+    // Do multiple searches to maximize PT-BR results
+    const searches = [
+      query,
+      `${query} dublado`,
+      `${query} dual`,
+      `${query} portuguese`,
+    ];
 
-    const response = await fetch(apibayUrl, {
-      headers: {
-        "Accept": "application/json",
-      },
-    });
+    const allResults: TorrentResult[] = [];
+    const seenHashes = new Set<string>();
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`apibay responded with ${response.status}: ${text}`);
+    for (const sq of searches) {
+      try {
+        const res = await fetch(
+          `https://apibay.org/q.php?q=${encodeURIComponent(sq)}&cat=200`,
+          { headers: { Accept: "application/json" } }
+        );
+        if (res.ok) {
+          const data: TorrentResult[] = await res.json();
+          for (const r of data) {
+            if (
+              r.info_hash !== "0000000000000000000000000000000000000000" &&
+              r.name !== "No results returned" &&
+              !seenHashes.has(r.info_hash)
+            ) {
+              seenHashes.add(r.info_hash);
+              allResults.push(r);
+            }
+          }
+        }
+      } catch { /* skip failed search */ }
     }
 
-    const results: TorrentResult[] = await response.json();
-
-    // Filter out "no results" placeholder
-    const validResults = results.filter(
-      (r) => r.info_hash !== "0000000000000000000000000000000000000000" && r.name !== "No results returned"
-    );
-
-    // Process and sort streams
-    const streams = validResults.map((r) => {
+    const streams = allResults.map((r) => {
       const ptBr = isPtBrOrDual(r.name);
       const quality = parseQuality(r.name);
       const seeds = parseInt(r.seeders) || 0;
@@ -104,19 +112,23 @@ Deno.serve(async (req) => {
         sizeBytes,
         quality,
         ptBr,
-        title: `${quality}\n${r.name}\n💾 ${size}\n👤 ${seeds}${ptBr ? "\n🇧🇷 PT-BR/Dual" : ""}`,
+        title: `${quality} - ${r.name}`,
       };
     });
 
-    // Sort: PT-BR first, then by seeds
+    // Sort: PT-BR first, then by seeds descending
     streams.sort((a, b) => {
       if (a.ptBr && !b.ptBr) return -1;
       if (!a.ptBr && b.ptBr) return 1;
       return b.seeds - a.seeds;
     });
 
+    // Filter out very low seed torrents (keep at least some)
+    const viable = streams.filter((s) => s.seeds >= 2);
+    const result = viable.length >= 3 ? viable : streams;
+
     return new Response(
-      JSON.stringify({ streams: streams.slice(0, 30) }),
+      JSON.stringify({ streams: result.slice(0, 30) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
