@@ -128,18 +128,24 @@ export default function Top10Row({ items, isLoading }: Top10RowProps) {
               >
                 {/* Rank number */}
                 <div
-                  className="absolute -left-2 -bottom-2 z-10 pointer-events-none select-none"
+                  className="absolute -left-4 bottom-0 z-10 pointer-events-none select-none transition-all duration-500"
                   style={{
-                    fontSize: isHovered ? "0px" : "120px",
-                    lineHeight: "0.8",
-                    fontWeight: 900,
-                    color: "transparent",
-                    WebkitTextStroke: "3px hsl(var(--primary) / 0.6)",
-                    transition: "all 0.5s ease-out",
                     opacity: isHovered ? 0 : 1,
                   }}
                 >
-                  {index + 1}
+                  <span
+                    className="font-black italic leading-none block"
+                    style={{
+                      fontSize: "140px",
+                      background: `linear-gradient(to bottom, hsl(var(--primary)), hsl(var(--primary) / 0.2))`,
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      textShadow: "none",
+                      filter: "drop-shadow(0 0 20px hsl(var(--primary) / 0.3))",
+                    }}
+                  >
+                    {index + 1}
+                  </span>
                 </div>
 
                 <div
@@ -161,12 +167,12 @@ export default function Top10Row({ items, isLoading }: Top10RowProps) {
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-surface/80" />
                       </div>
                       {/* Right: trailer */}
-                      <div className="flex-1 relative bg-black">
+                      <div className="flex-1 relative bg-black overflow-hidden">
                         <iframe
-                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}`}
-                          className="absolute inset-0 w-full h-full"
+                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&annotation=0`}
+                          className="absolute w-[140%] h-[140%]"
+                          style={{ top: "-20%", left: "-20%" }}
                           allow="autoplay; encrypted-media"
-                          allowFullScreen
                           title="Trailer"
                         />
                         {/* Info overlay on trailer */}
