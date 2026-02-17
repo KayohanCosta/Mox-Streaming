@@ -21,6 +21,7 @@ export interface MediaItem {
 
 export interface MediaDetails extends MediaItem {
   imdb_id?: string;
+  external_ids?: { imdb_id?: string; tvdb_id?: number };
   genres: { id: number; name: string }[];
   runtime?: number;
   episode_run_time?: number[];
@@ -134,7 +135,7 @@ export async function fetchCategory(
 }
 
 export async function fetchDetails(id: number, type: "movie" | "tv"): Promise<MediaDetails> {
-  return tmdbFetch(`${type}/${id}?append_to_response=credits,watch/providers`);
+  return tmdbFetch(`${type}/${id}?append_to_response=credits,watch/providers,external_ids`);
 }
 
 export async function fetchSeasonEpisodes(tvId: number, seasonNumber: number): Promise<Episode[]> {

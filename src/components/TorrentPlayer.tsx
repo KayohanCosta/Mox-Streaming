@@ -99,7 +99,12 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
       }
     }
 
-    if (imdbId) fetchStreams();
+    if (imdbId) {
+      fetchStreams();
+    } else {
+      setLoading(false);
+      setError("ID IMDB não disponível para este conteúdo. Não é possível buscar torrents.");
+    }
   }, [imdbId, type, season, episode]);
 
   // Load webtor SDK once
