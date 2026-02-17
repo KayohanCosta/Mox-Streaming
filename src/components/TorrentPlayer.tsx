@@ -5,11 +5,16 @@ interface TorrentStream {
   name: string;
   title: string;
   infoHash: string;
-  fileIdx?: number;
+  seeds: number;
+  leechers: number;
+  size: string;
+  quality: string;
+  ptBr: boolean;
 }
 
 interface TorrentPlayerProps {
-  imdbId: string;
+  contentTitle: string;
+  year?: string;
   type: "movie" | "tv";
   season?: number;
   episode?: number;
@@ -26,17 +31,7 @@ const TRACKERS = [
   "udp://open.demonii.com:1337/announce",
 ].map((t) => `&tr=${encodeURIComponent(t)}`).join("");
 
-function parseStreamInfo(title: string) {
-  const lines = title.split("\n");
-  const quality = lines[0] || "";
-  const size = title.match(/💾\s*([\d.]+\s*[GMKT]B)/i)?.[1] || "";
-  const seeds = title.match(/👤\s*(\d+)/)?.[1] || "0";
-  const source = title.match(/⚙️\s*(.+)/)?.[1]?.trim() || "";
-  const lang = title.match(/🇧🇷|Portugu|DUB|DUAL|PT-BR/i) ? "🇧🇷 PT-BR" : "";
-  return { quality, size, seeds: Number(seeds), source, lang };
-}
-
-export default function TorrentPlayer({ imdbId, type, season, episode }: TorrentPlayerProps) {
+export default function TorrentPlayer({ contentTitle, year, type, season, episode }: TorrentPlayerProps) {
   const [streams, setStreams] = useState<TorrentStream[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,18 +40,30 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
   const playerRef = useRef<HTMLDivElement>(null);
   const scriptLoadedRef = useRef(false);
 
-  // Fetch streams from torrentio
+  // Fetch streams via edge function
   useEffect(() => {
     async function fetchStreams() {
       try {
         setLoading(true);
         setError(null);
-        const mediaType = type === "movie" ? "movie" : "series";
-        const idPart =
-          type === "movie" ? imdbId : `${imdbId}:${season}:${episode}`;
+
+        let searchQuery = contentTitle;
+        if (year) searchQuery += ` ${year}`;
+        if (type === "tv" && season && episode) {
+          searchQuery += ` S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
+        }
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
         const res = await fetch(
-          `https://torrentio.strem.fun/stream/${mediaType}/${idPart}.json`
+          `${supabaseUrl}/functions/v1/torrent-search?q=${encodeURIComponent(searchQuery)}&type=${type}`,
+          {
+            headers: {
+              Authorization: `Bearer ${supabaseKey}`,
+              apikey: supabaseKey,
+            },
+          }
         );
 
         if (!res.ok) throw new Error("Falha ao buscar torrents");
@@ -64,33 +71,10 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
         const data = await res.json();
         const allStreams: TorrentStream[] = data.streams || [];
 
-        // Prioritize PT-BR / Dual audio
-        const ptStreams = allStreams.filter((s) => {
-          const t = (s.title || "").toLowerCase();
-          return (
-            t.includes("dual") ||
-            t.includes("dub") ||
-            t.includes("portugu") ||
-            t.includes("pt-br") ||
-            t.includes("🇧🇷") ||
-            t.includes("brazilian") ||
-            t.includes("multi")
-          );
-        });
-
-        // Sort by seeds (descending)
-        const sort = (arr: TorrentStream[]) =>
-          arr.sort((a, b) => {
-            const seedsA = Number(a.title.match(/👤\s*(\d+)/)?.[1] || 0);
-            const seedsB = Number(b.title.match(/👤\s*(\d+)/)?.[1] || 0);
-            return seedsB - seedsA;
-          });
-
-        const sorted = sort(ptStreams.length > 0 ? ptStreams : allStreams);
-        setStreams(sorted.slice(0, 25));
-
-        if (sorted.length === 0) {
+        if (allStreams.length === 0) {
           setError("Nenhum torrent encontrado para este conteúdo.");
+        } else {
+          setStreams(allStreams);
         }
       } catch {
         setError("Não foi possível buscar torrents. Tente novamente.");
@@ -99,83 +83,75 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
       }
     }
 
-    if (imdbId) {
+    if (contentTitle) {
       fetchStreams();
     } else {
       setLoading(false);
-      setError("ID IMDB não disponível para este conteúdo. Não é possível buscar torrents.");
+      setError("Título não disponível para busca de torrents.");
     }
-  }, [imdbId, type, season, episode]);
+  }, [contentTitle, year, type, season, episode]);
 
   // Load webtor SDK once
   useEffect(() => {
     if (scriptLoadedRef.current) return;
+    const existing = document.querySelector('script[src*="webtor"]');
+    if (existing) {
+      scriptLoadedRef.current = true;
+      return;
+    }
     const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js";
+    script.src = "https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js";
     script.async = true;
     script.charset = "utf-8";
     script.onload = () => {
       scriptLoadedRef.current = true;
     };
     document.head.appendChild(script);
-    return () => {
-      try {
-        document.head.removeChild(script);
-      } catch {}
-    };
   }, []);
 
-  const playStream = useCallback(
-    (stream: TorrentStream) => {
-      setSelectedStream(stream);
-      setPlayerReady(false);
+  const playStream = useCallback((stream: TorrentStream) => {
+    setSelectedStream(stream);
+    setPlayerReady(false);
 
-      const magnet = `magnet:?xt=urn:btih:${stream.infoHash}${TRACKERS}`;
+    const magnet = `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodeURIComponent(stream.name)}${TRACKERS}`;
 
-      // Wait for webtor SDK
-      const initPlayer = () => {
-        if (!playerRef.current) return;
+    const initPlayer = () => {
+      if (!playerRef.current) return;
 
-        // Clear previous player
-        playerRef.current.innerHTML = "";
-        const playerDiv = document.createElement("div");
-        playerDiv.id = `webtor-player-${Date.now()}`;
-        playerDiv.style.width = "100%";
-        playerDiv.style.height = "100%";
-        playerRef.current.appendChild(playerDiv);
+      playerRef.current.innerHTML = "";
+      const playerDiv = document.createElement("div");
+      playerDiv.id = `webtor-player-${Date.now()}`;
+      playerDiv.style.width = "100%";
+      playerDiv.style.height = "100%";
+      playerRef.current.appendChild(playerDiv);
 
-        const w = (window as any);
-        w.webtor = w.webtor || [];
-        w.webtor.push({
-          id: playerDiv.id,
-          magnet,
-          on: (e: any) => {
-            if (e.name === w.webtor.INITED) {
-              setPlayerReady(true);
-              e.api.play();
-            }
-          },
-          features: {
-            p2pRecovery: true,
-          },
-          lang: "pt",
-        });
-      };
-
-      if (scriptLoadedRef.current) {
-        setTimeout(initPlayer, 100);
-      } else {
-        const interval = setInterval(() => {
-          if (scriptLoadedRef.current) {
-            clearInterval(interval);
-            initPlayer();
+      const w = window as any;
+      w.webtor = w.webtor || [];
+      w.webtor.push({
+        id: playerDiv.id,
+        magnet,
+        on: (e: any) => {
+          if (e.name === w.webtor.INITED) {
+            setPlayerReady(true);
+            e.api.play();
           }
-        }, 200);
-      }
-    },
-    []
-  );
+        },
+        features: { p2pRecovery: true },
+        lang: "pt",
+      });
+    };
+
+    if (scriptLoadedRef.current) {
+      setTimeout(initPlayer, 100);
+    } else {
+      const interval = setInterval(() => {
+        if (scriptLoadedRef.current) {
+          clearInterval(interval);
+          initPlayer();
+        }
+      }, 200);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -195,11 +171,10 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
     );
   }
 
-  // If a stream is selected, show the player
+  // Player view
   if (selectedStream) {
     return (
       <div className="flex flex-col h-full">
-        {/* Mini bar to go back to list */}
         <div className="flex items-center gap-3 px-4 py-2 bg-card/60 border-b border-border/20">
           <button
             onClick={() => {
@@ -210,11 +185,11 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
           >
             ← Voltar à lista
           </button>
-          <span className="text-xs text-foreground/60 truncate">
-            {selectedStream.title.split("\n")[0]}
+          <span className="text-xs text-foreground/60 truncate flex-1">
+            {selectedStream.name}
           </span>
           {!playerReady && (
-            <span className="flex items-center gap-1 text-xs text-primary ml-auto">
+            <span className="flex items-center gap-1 text-xs text-primary">
               <Loader2 className="w-3 h-3 animate-spin" /> Preparando stream...
             </span>
           )}
@@ -238,44 +213,42 @@ export default function TorrentPlayer({ imdbId, type, season, episode }: Torrent
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide px-4 py-2 space-y-2">
-        {streams.map((stream, i) => {
-          const info = parseStreamInfo(stream.title);
-          return (
-            <button
-              key={`${stream.infoHash}-${i}`}
-              onClick={() => playStream(stream)}
-              className="w-full flex items-center gap-4 p-3 rounded-lg bg-card/50 hover:bg-card border border-border/20 hover:border-primary/30 transition-all group text-left"
-            >
-              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Play className="w-5 h-5 text-primary" />
-              </div>
+        {streams.map((stream, i) => (
+          <button
+            key={`${stream.infoHash}-${i}`}
+            onClick={() => playStream(stream)}
+            className="w-full flex items-center gap-4 p-3 rounded-lg bg-card/50 hover:bg-card border border-border/20 hover:border-primary/30 transition-all group text-left"
+          >
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+              <Play className="w-5 h-5 text-primary" />
+            </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-foreground truncate">
-                    {info.quality}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="text-xs font-bold bg-secondary/80 px-2 py-0.5 rounded">
+                  {stream.quality}
+                </span>
+                {stream.ptBr && (
+                  <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">
+                    🇧🇷 PT-BR/Dual
                   </span>
-                  {info.lang && (
-                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">
-                      {info.lang}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  {info.size && <span>💾 {info.size}</span>}
-                  <span>👤 {info.seeds} seeds</span>
-                  {info.source && <span>⚙️ {info.source}</span>}
-                </div>
+                )}
               </div>
+              <p className="text-xs text-foreground/70 truncate mb-1">{stream.name}</p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>💾 {stream.size}</span>
+                <span>👤 {stream.seeds} seeds</span>
+                <span>📥 {stream.leechers} leechers</span>
+              </div>
+            </div>
 
-              {type === "movie" ? (
-                <Film className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              ) : (
-                <Tv className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              )}
-            </button>
-          );
-        })}
+            {type === "movie" ? (
+              <Film className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            ) : (
+              <Tv className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            )}
+          </button>
+        ))}
       </div>
     </div>
   );
