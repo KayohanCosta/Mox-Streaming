@@ -126,6 +126,7 @@ export default function DetailsPage() {
   }
 
   const title = getTitle(details);
+  const originalTitle = details.original_title || details.original_name || title;
   const year = getYear(details);
   const rating = getRating(details);
   const runtime = details.runtime || (details.episode_run_time?.[0] ?? 0);
@@ -210,7 +211,8 @@ export default function DetailsPage() {
           <div className="flex-1 relative">
             {player.source === "torrent" ? (
               <TorrentPlayer
-                imdbId={details?.imdb_id || details?.external_ids?.imdb_id || ""}
+                contentTitle={originalTitle}
+                year={year}
                 type={type === "movie" ? "movie" : "tv"}
                 season={player.seasonNum}
                 episode={player.episodeNum}
