@@ -3,7 +3,8 @@ import { useParams } from "react-router-dom";
 import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
 import ContentRow from "@/components/ContentRow";
 import Navbar from "@/components/Navbar";
-import { Star, Clock, Calendar, Play, X, Youtube, Mic, Subtitles, Download, ExternalLink } from "lucide-react";
+import { Star, Clock, Calendar, Play, X, Youtube, Mic, Subtitles, Download } from "lucide-react";
+import TorrentPlayer from "@/components/TorrentPlayer";
 
 type PlayerSource = "dublado-warez" | "dublado-superflix" | "legendado" | "torrent";
 type PlayerTab = "dublado" | "legendado" | "torrent";
@@ -205,23 +206,15 @@ export default function DetailsPage() {
             </button>
           </div>
 
-          {/* Player iframe or Stremio redirect */}
+          {/* Player content */}
           <div className="flex-1 relative">
             {player.source === "torrent" ? (
-              <div className="flex flex-col items-center justify-center h-full gap-6">
-                <Download className="w-16 h-16 text-primary" />
-                <p className="text-lg text-foreground/80 text-center max-w-md">
-                  Para assistir via torrent, você será redirecionado ao Stremio Web.
-                </p>
-                <a
-                  href={getPlayerUrl("torrent", player.seasonNum, player.episodeNum)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
-                >
-                  <ExternalLink className="w-5 h-5" /> Abrir no Stremio Web
-                </a>
-              </div>
+              <TorrentPlayer
+                imdbId={details?.imdb_id || ""}
+                type={type === "movie" ? "movie" : "tv"}
+                season={player.seasonNum}
+                episode={player.episodeNum}
+              />
             ) : (
               <iframe
                 key={player.source}
