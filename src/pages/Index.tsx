@@ -3,7 +3,9 @@ import { fetchTrending, fetchTop10Brasil, fetchCategory, CATEGORIES, MediaItem }
 import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
 import Top10Row from "@/components/Top10Row";
+import ContinueWatchingRow from "@/components/ContinueWatchingRow";
 import Navbar from "@/components/Navbar";
+import { useWatchProgress } from "@/hooks/useWatchProgress";
 
 const Index = () => {
   const [trending, setTrending] = useState<MediaItem[]>([]);
@@ -14,6 +16,7 @@ const Index = () => {
   const [doramas, setDoramas] = useState<MediaItem[]>([]);
   const [novelas, setNovelas] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { items: watchProgress } = useWatchProgress();
 
   useEffect(() => {
     async function load() {
@@ -48,6 +51,7 @@ const Index = () => {
       <Navbar />
       <HeroBanner items={trending} isLoading={loading} />
       <div className="-mt-20 relative z-10 pb-12">
+        <ContinueWatchingRow items={watchProgress} />
         <Top10Row items={top10} isLoading={loading} />
         <ContentRow title="🔥 Em Alta no Brasil" items={trending} mediaType="trending" isLoading={loading} />
         <ContentRow title="🎬 Filmes Populares" items={movies} mediaType="filme" isLoading={loading} />

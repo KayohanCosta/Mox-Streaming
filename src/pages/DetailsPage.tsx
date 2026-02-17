@@ -5,6 +5,7 @@ import ContentRow from "@/components/ContentRow";
 import Navbar from "@/components/Navbar";
 import { Star, Clock, Calendar, Play, X, Youtube, Mic, Subtitles, Download } from "lucide-react";
 import TorrentPlayer from "@/components/TorrentPlayer";
+import { saveWatchProgress } from "@/hooks/useWatchProgress";
 
 type PlayerSource = "dublado-warez" | "dublado-superflix" | "legendado" | "torrent";
 type PlayerTab = "dublado" | "legendado" | "torrent";
@@ -66,7 +67,20 @@ export default function DetailsPage() {
 
   const openPlayer = useCallback((seasonNum?: number, episodeNum?: number) => {
     setPlayer({ open: true, tab: "dublado", source: "dublado-warez", seasonNum, episodeNum });
-  }, []);
+
+    // Save to "continue watching"
+    if (details) {
+      saveWatchProgress({
+        id: Number(id),
+        type: type === "movie" ? "movie" : "tv",
+        title: getTitle(details),
+        poster_path: details.poster_path,
+        progress: 10, // initial progress
+        season: seasonNum,
+        episode: episodeNum,
+      });
+    }
+  }, [details, id, type]);
 
   const closePlayer = () => setPlayer(p => ({ ...p, open: false }));
 
