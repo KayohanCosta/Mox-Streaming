@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchTrending, fetchCategory, CATEGORIES, MediaItem } from "@/lib/tmdb";
+import { fetchTrending, fetchTop10Brasil, fetchCategory, CATEGORIES, MediaItem } from "@/lib/tmdb";
 import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
 import Top10Row from "@/components/Top10Row";
@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 
 const Index = () => {
   const [trending, setTrending] = useState<MediaItem[]>([]);
+  const [top10, setTop10] = useState<MediaItem[]>([]);
   const [movies, setMovies] = useState<MediaItem[]>([]);
   const [series, setSeries] = useState<MediaItem[]>([]);
   const [anime, setAnime] = useState<MediaItem[]>([]);
@@ -17,8 +18,9 @@ const Index = () => {
   useEffect(() => {
     async function load() {
       try {
-        const [trendData, movData, serData, aniData, dorData, novData] = await Promise.all([
+        const [trendData, top10Data, movData, serData, aniData, dorData, novData] = await Promise.all([
           fetchTrending(),
+          fetchTop10Brasil(),
           fetchCategory(CATEGORIES.movies),
           fetchCategory(CATEGORIES.series),
           fetchCategory(CATEGORIES.anime),
@@ -26,6 +28,7 @@ const Index = () => {
           fetchCategory(CATEGORIES.novelas),
         ]);
         setTrending(trendData);
+        setTop10(top10Data);
         setMovies(movData.results);
         setSeries(serData.results);
         setAnime(aniData.results);
@@ -45,7 +48,7 @@ const Index = () => {
       <Navbar />
       <HeroBanner items={trending} isLoading={loading} />
       <div className="-mt-20 relative z-10 pb-12">
-        <Top10Row items={trending} isLoading={loading} />
+        <Top10Row items={top10} isLoading={loading} />
         <ContentRow title="🔥 Em Alta no Brasil" items={trending} mediaType="trending" isLoading={loading} />
         <ContentRow title="🎬 Filmes Populares" items={movies} mediaType="filme" isLoading={loading} />
         <ContentRow title="📺 Séries Mais Bem Avaliadas" items={series} mediaType="serie" isLoading={loading} />

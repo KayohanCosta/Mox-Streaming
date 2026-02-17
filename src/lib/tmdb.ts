@@ -108,10 +108,20 @@ export async function fetchTrending(): Promise<MediaItem[]> {
   ]);
   return [...movies.results, ...tv.results]
     .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, 10)
+    .slice(0, 20)
     .map((item) => ({
       ...item,
       media_type: item.first_air_date ? "tv" : "movie",
+    }));
+}
+
+export async function fetchTop10Brasil(): Promise<MediaItem[]> {
+  const data = await tmdbFetch<{ results: MediaItem[] }>("trending/all/week?region=BR");
+  return data.results
+    .slice(0, 10)
+    .map((item) => ({
+      ...item,
+      media_type: item.media_type || (item.first_air_date ? "tv" : "movie"),
     }));
 }
 
