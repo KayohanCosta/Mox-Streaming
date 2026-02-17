@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "lucide-react";
 import { MediaItem, getTitle, getYear, getRating, posterUrl, fetchVideos } from "@/lib/tmdb";
 import { useNavigate } from "react-router-dom";
 
@@ -14,6 +14,7 @@ export default function Top10Row({ items, isLoading }: Top10RowProps) {
   const [showRight, setShowRight] = useState(true);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [trailerKeys, setTrailerKeys] = useState<Record<number, string>>({});
+  const [muted, setMuted] = useState(true);
   const navigate = useNavigate();
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -169,12 +170,19 @@ export default function Top10Row({ items, isLoading }: Top10RowProps) {
                       {/* Right: trailer */}
                       <div className="flex-1 relative bg-black overflow-hidden">
                         <iframe
-                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&annotation=0`}
-                          className="absolute w-[140%] h-[140%]"
-                          style={{ top: "-20%", left: "-20%" }}
+                          src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&showinfo=0&rel=0&modestbranding=1&loop=1&playlist=${trailerKey}&iv_load_policy=3&disablekb=1&fs=0&cc_load_policy=0&annotation=0`}
+                          className="absolute w-[300%] h-[300%]"
+                          style={{ top: "-100%", left: "-100%" }}
                           allow="autoplay; encrypted-media"
                           title="Trailer"
                         />
+                        {/* Mute/unmute button */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setMuted(!muted); }}
+                          className="absolute top-2 right-2 z-20 w-8 h-8 rounded-full bg-background/70 backdrop-blur-sm flex items-center justify-center hover:bg-background/90 transition-colors"
+                        >
+                          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                        </button>
                         {/* Info overlay on trailer */}
                         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
                           <h3 className="text-sm font-bold text-foreground truncate">
