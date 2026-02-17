@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { fetchTrending, fetchCategory, CATEGORIES, MediaItem } from "@/lib/tmdb";
 import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
+import Top10Row from "@/components/Top10Row";
 import Navbar from "@/components/Navbar";
 
 const Index = () => {
@@ -44,6 +45,7 @@ const Index = () => {
       <Navbar />
       <HeroBanner items={trending} isLoading={loading} />
       <div className="-mt-20 relative z-10 pb-12">
+        <Top10Row items={trending} isLoading={loading} />
         <ContentRow title="🔥 Em Alta no Brasil" items={trending} mediaType="trending" isLoading={loading} />
         <ContentRow title="🎬 Filmes Populares" items={movies} mediaType="filme" isLoading={loading} />
         <ContentRow title="📺 Séries Mais Bem Avaliadas" items={series} mediaType="serie" isLoading={loading} />
