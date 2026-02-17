@@ -76,7 +76,7 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-background/95 via-background/70 to-transparent backdrop-blur-sm">
-      <div className="max-w-[1400px] mx-auto px-4 md:px-8">
+      <div className="px-4 md:px-12">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-1 flex-shrink-0">
@@ -176,7 +176,7 @@ export default function Navbar() {
       {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden bg-background/95 backdrop-blur-md border-t border-border animate-fade-in">
-          <div className="px-4 py-4 space-y-1">
+          <div className="px-4 md:px-12 py-4 space-y-1">
             {navItems.map((item) => (
               <Link
                 key={item.path}

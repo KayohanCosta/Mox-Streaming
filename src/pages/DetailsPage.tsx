@@ -159,7 +159,9 @@ export default function DetailsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <div className="px-4 md:px-12">
+        <Navbar />
+      </div>
 
       {/* Player Modal with Tabs */}
       {player.open && (
@@ -343,9 +345,9 @@ export default function DetailsPage() {
         </div>
       )}
 
-      {/* Info sections */}
-      <div className="max-w-[1400px] mx-auto px-4 md:px-8 pb-16 -mt-8 relative z-10">
-        {/* Directors */}
+      {/* Info sections - Alinhado com o Hero */}
+      <div className="px-4 md:px-12 max-w-3xl pb-10 -mt-8 relative z-10">
+        {/* Direção */}
         {directors.length > 0 && (
           <div className="mb-6">
             <h3 className="text-xs uppercase text-muted-foreground tracking-wider mb-1">Direção</h3>
@@ -353,7 +355,7 @@ export default function DetailsPage() {
           </div>
         )}
 
-        {/* Cast */}
+        {/* Elenco */}
         {cast.length > 0 && (
           <div className="mb-10">
             <h2 className="text-xl font-bold mb-4">Elenco</h2>
@@ -375,7 +377,7 @@ export default function DetailsPage() {
           </div>
         )}
 
-        {/* Watch Providers */}
+        {/* Onde Assistir */}
         {uniqueProviders.length > 0 && (
           <div className="mb-10">
             <h2 className="text-xl font-bold mb-4">Onde Assistir</h2>
@@ -392,9 +394,11 @@ export default function DetailsPage() {
             </div>
           </div>
         )}
+      </div>
 
-        {/* Seasons & Episodes (TV only) */}
-        {type === "tv" && details.seasons && details.seasons.length > 0 && (
+      {/* Seasons & Episodes (TV only) - Max-width 1400px */}
+      {type === "tv" && details.seasons && details.seasons.length > 0 && (
+        <div className="max-w-[1400px] mx-auto px-4 md:px-12 pb-10">
           <div>
             <h2 className="text-xl font-bold mb-4">Temporadas</h2>
             <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-2">
@@ -444,19 +448,21 @@ export default function DetailsPage() {
               ))}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Similar Content */}
+      {/* Conteúdos Relacionados - Full Width */}
       {similar.length > 0 && (
-        <div className="pb-12">
+        <div className="pb-16">
           <ContentRow
-            title="🎯 Títulos Semelhantes"
+            title="Conteúdos Relacionados"
             items={similar}
             mediaType={type === "movie" ? "filme" : "serie"}
           />
         </div>
       )}
+
+      {/* Similar Content removido daqui, agora está acima */}
     </div>
   );
 }
