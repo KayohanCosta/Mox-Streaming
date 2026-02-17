@@ -72,19 +72,31 @@ export default function DetailsPage() {
   const getPlayerUrl = useCallback((source: PlayerSource, sNum?: number, eNum?: number): string => {
     if (!id) return "";
     const isMovie = type === "movie";
+    const contentType = isMovie ? "movie" : "tv";
+    const contentTypeMap: Record<string, Record<string, string>> = {
+      movie: { warezcdn: "filme", superflix: "filme", vidsrcme: "movie" },
+      tv: { warezcdn: "serie", superflix: "serie", vidsrcme: "tv" },
+    };
+
     switch (source) {
-      case "dublado-warez":
-        return isMovie
-          ? `https://embed.warezcdn.net/filme/${id}`
-          : `https://embed.warezcdn.net/serie/${id}/${sNum}/${eNum}`;
-      case "dublado-superflix":
-        return isMovie
-          ? `https://superflixapi.one/filme/${id}`
-          : `https://superflixapi.one/serie/${id}/${sNum}/${eNum}`;
-      case "legendado":
-        return isMovie
-          ? `https://vidsrc.me/embed/movie/${id}`
-          : `https://vidsrc.me/embed/tv/${id}/${sNum}/${eNum}`;
+      case "dublado-warez": {
+        const mapped = contentTypeMap[contentType].warezcdn;
+        let url = `https://warezcdn.site/${mapped}/${id}`;
+        if (sNum && eNum && !isMovie) url += `/${sNum}/${eNum}`;
+        return url;
+      }
+      case "dublado-superflix": {
+        const mapped = contentTypeMap[contentType].superflix;
+        let url = `https://superflixapi.one/${mapped}/${id}`;
+        if (sNum && eNum && !isMovie) url += `/${sNum}/${eNum}`;
+        return url;
+      }
+      case "legendado": {
+        const mapped = contentTypeMap[contentType].vidsrcme;
+        let url = `https://vidsrcme.ru/embed/${mapped}/${id}`;
+        if (sNum && eNum && !isMovie) url += `/${sNum}-${eNum}`;
+        return url;
+      }
       case "torrent":
         return isMovie
           ? `https://web.stremio.com/#/detail/movie/tmdb:${id}`
