@@ -20,6 +20,7 @@ export interface MediaItem {
 }
 
 export interface MediaDetails extends MediaItem {
+  imdb_id?: string;
   genres: { id: number; name: string }[];
   runtime?: number;
   episode_run_time?: number[];
