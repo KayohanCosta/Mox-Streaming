@@ -3,7 +3,18 @@ import { useParams } from "react-router-dom";
 import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
 import ContentRow from "@/components/ContentRow";
 import Navbar from "@/components/Navbar";
-import { Star, Clock, Calendar, Play, X, Youtube } from "lucide-react";
+import { Star, Clock, Calendar, Play, X, Youtube, Mic, Subtitles, Download, ExternalLink } from "lucide-react";
+
+type PlayerSource = "dublado-warez" | "dublado-superflix" | "legendado" | "torrent";
+type PlayerTab = "dublado" | "legendado" | "torrent";
+
+interface PlayerState {
+  open: boolean;
+  tab: PlayerTab;
+  source: PlayerSource;
+  seasonNum?: number;
+  episodeNum?: number;
+}
 
 export default function DetailsPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
@@ -14,12 +25,12 @@ export default function DetailsPage() {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
-  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
+  const [player, setPlayer] = useState<PlayerState>({ open: false, tab: "dublado", source: "dublado-warez" });
 
   useEffect(() => {
     if (!id || !type) return;
     setLoading(true);
-    setPlayerUrl(null);
+    setPlayer({ open: false, tab: "dublado", source: "dublado-warez" });
     fetchDetails(Number(id), type as "movie" | "tv")
       .then((data) => {
         setDetails(data);
@@ -52,17 +63,36 @@ export default function DetailsPage() {
     }
   };
 
-  const watchMovie = useCallback(() => {
-    if (!id) return;
-    setPlayerUrl(`https://embed.warezcdn.net/filme/${id}`);
-  }, [id]);
+  const openPlayer = useCallback((seasonNum?: number, episodeNum?: number) => {
+    setPlayer({ open: true, tab: "dublado", source: "dublado-warez", seasonNum, episodeNum });
+  }, []);
 
-  const watchEpisode = useCallback((seasonNum: number, episodeNum: number) => {
-    if (!id) return;
-    setPlayerUrl(`https://embed.warezcdn.net/serie/${id}/${seasonNum}/${episodeNum}`);
-  }, [id]);
+  const closePlayer = () => setPlayer(p => ({ ...p, open: false }));
 
-  const closePlayer = () => setPlayerUrl(null);
+  const getPlayerUrl = useCallback((source: PlayerSource, sNum?: number, eNum?: number): string => {
+    if (!id) return "";
+    const isMovie = type === "movie";
+    switch (source) {
+      case "dublado-warez":
+        return isMovie
+          ? `https://embed.warezcdn.net/filme/${id}`
+          : `https://embed.warezcdn.net/serie/${id}/${sNum}/${eNum}`;
+      case "dublado-superflix":
+        return isMovie
+          ? `https://superflixapi.one/filme/${id}`
+          : `https://superflixapi.one/serie/${id}/${sNum}/${eNum}`;
+      case "legendado":
+        return isMovie
+          ? `https://vidsrc.me/embed/movie/${id}`
+          : `https://vidsrc.me/embed/tv/${id}/${sNum}/${eNum}`;
+      case "torrent":
+        return isMovie
+          ? `https://web.stremio.com/#/detail/movie/tmdb:${id}`
+          : `https://web.stremio.com/#/detail/series/tmdb:${id}:${sNum}:${eNum}`;
+      default:
+        return "";
+    }
+  }, [id, type]);
 
   if (loading) {
     return (
@@ -103,23 +133,95 @@ export default function DetailsPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Fullscreen Player */}
-      {playerUrl && (
-        <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center animate-fade-in">
-          <iframe
-            src={playerUrl}
-            className="w-full h-full"
-            frameBorder="0"
-            allowFullScreen
-            allow="autoplay; encrypted-media; fullscreen"
-            referrerPolicy="origin"
-          />
-          <button
-            onClick={closePlayer}
-            className="absolute top-4 right-4 bg-destructive hover:bg-destructive/80 text-destructive-foreground px-4 py-2 rounded-full font-semibold transition-colors z-10 flex items-center gap-2"
-          >
-            <X className="w-4 h-4" /> Fechar
-          </button>
+      {/* Player Modal with Tabs */}
+      {player.open && (
+        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col animate-fade-in">
+          {/* Top bar with tabs and close */}
+          <div className="flex items-center justify-between px-4 py-3 bg-card/80 backdrop-blur-sm border-b border-border/30">
+            <div className="flex gap-1">
+              {([
+                { tab: "dublado" as PlayerTab, icon: Mic, label: "Dublado" },
+                { tab: "legendado" as PlayerTab, icon: Subtitles, label: "Legendado" },
+                { tab: "torrent" as PlayerTab, icon: Download, label: "Torrent" },
+              ]).map(({ tab, icon: Icon, label }) => (
+                <button
+                  key={tab}
+                  onClick={() => setPlayer(p => ({
+                    ...p,
+                    tab,
+                    source: tab === "dublado" ? "dublado-warez" : tab === "legendado" ? "legendado" : "torrent",
+                  }))}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    player.tab === tab
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sub-sources for Dublado */}
+            {player.tab === "dublado" && (
+              <div className="flex gap-1">
+                {([
+                  { source: "dublado-warez" as PlayerSource, label: "WarezCDN" },
+                  { source: "dublado-superflix" as PlayerSource, label: "SuperFlix" },
+                ]).map(({ source, label }) => (
+                  <button
+                    key={source}
+                    onClick={() => setPlayer(p => ({ ...p, source }))}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                      player.source === source
+                        ? "bg-accent text-accent-foreground"
+                        : "bg-secondary/30 text-muted-foreground hover:bg-secondary/60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={closePlayer}
+              className="bg-destructive hover:bg-destructive/80 text-destructive-foreground px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-2"
+            >
+              <X className="w-4 h-4" /> Fechar
+            </button>
+          </div>
+
+          {/* Player iframe or Stremio redirect */}
+          <div className="flex-1 relative">
+            {player.source === "torrent" ? (
+              <div className="flex flex-col items-center justify-center h-full gap-6">
+                <Download className="w-16 h-16 text-primary" />
+                <p className="text-lg text-foreground/80 text-center max-w-md">
+                  Para assistir via torrent, você será redirecionado ao Stremio Web.
+                </p>
+                <a
+                  href={getPlayerUrl("torrent", player.seasonNum, player.episodeNum)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
+                >
+                  <ExternalLink className="w-5 h-5" /> Abrir no Stremio Web
+                </a>
+              </div>
+            ) : (
+              <iframe
+                key={player.source}
+                src={getPlayerUrl(player.source, player.seasonNum, player.episodeNum)}
+                className="w-full h-full"
+                frameBorder="0"
+                allowFullScreen
+                allow="autoplay; encrypted-media; fullscreen"
+                referrerPolicy="origin"
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -170,14 +272,14 @@ export default function DetailsPage() {
             <div className="flex gap-3">
               {type === "movie" ? (
                 <button
-                  onClick={watchMovie}
+                  onClick={() => openPlayer()}
                   className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
                 >
                   <Play className="w-5 h-5 fill-current" /> Assistir Agora
                 </button>
               ) : (
                 <button
-                  onClick={() => episodes.length > 0 && watchEpisode(selectedSeason, episodes[0]?.episode_number || 1)}
+                  onClick={() => episodes.length > 0 && openPlayer(selectedSeason, episodes[0]?.episode_number || 1)}
                   className="flex items-center gap-2 bg-primary hover:bg-primary/80 text-primary-foreground font-semibold px-8 py-3 rounded-lg transition-colors"
                 >
                   <Play className="w-5 h-5 fill-current" /> Assistir T{selectedSeason}E1
@@ -296,7 +398,7 @@ export default function DetailsPage() {
               {episodes.map((ep) => (
                 <div
                   key={ep.id}
-                  onClick={() => watchEpisode(selectedSeason, ep.episode_number)}
+                  onClick={() => openPlayer(selectedSeason, ep.episode_number)}
                   className="bg-card rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
                 >
                   <div className="aspect-video relative bg-surface">
