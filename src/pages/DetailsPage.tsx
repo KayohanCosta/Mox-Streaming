@@ -210,7 +210,7 @@ export default function DetailsPage() {
           <div className="flex-1 relative">
             {player.source === "torrent" ? (
               <TorrentPlayer
-                imdbId={details?.imdb_id || ""}
+                imdbId={details?.imdb_id || details?.external_ids?.imdb_id || ""}
                 type={type === "movie" ? "movie" : "tv"}
                 season={player.seasonNum}
                 episode={player.episodeNum}
