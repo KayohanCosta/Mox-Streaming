@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface TorrentResult {
@@ -46,6 +46,45 @@ function parseQuality(name: string): string {
   return "SD";
 }
 
+// Multiple API mirrors for resilience
+const API_ENDPOINTS = [
+  "https://apibay.org/q.php",
+  "https://torrents-csv.com/service/search", // fallback
+];
+
+async function searchApiBay(query: string): Promise<TorrentResult[]> {
+  // Try multiple User-Agents to avoid blocks
+  const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "curl/7.88.1",
+  ];
+
+  for (const ua of userAgents) {
+    try {
+      const res = await fetch(
+        `https://apibay.org/q.php?q=${encodeURIComponent(query)}&cat=200`,
+        {
+          headers: {
+            "Accept": "application/json",
+            "User-Agent": ua,
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        }
+      );
+      if (res.ok) {
+        const text = await res.text();
+        if (text.includes("Anonymous Proxy")) continue; // blocked, try next UA
+        const data: TorrentResult[] = JSON.parse(text);
+        if (data && data.length > 0 && data[0].name !== "No results returned") {
+          return data;
+        }
+      }
+    } catch { /* try next */ }
+  }
+  return [];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,11 +102,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Do multiple searches to maximize PT-BR results
     const searches = [
       query,
       `${query} dublado`,
-      `${query} dual`,
+      `${query} dual audio`,
       `${query} portuguese`,
     ];
 
@@ -75,25 +113,17 @@ Deno.serve(async (req) => {
     const seenHashes = new Set<string>();
 
     for (const sq of searches) {
-      try {
-        const res = await fetch(
-          `https://apibay.org/q.php?q=${encodeURIComponent(sq)}&cat=200`,
-          { headers: { Accept: "application/json" } }
-        );
-        if (res.ok) {
-          const data: TorrentResult[] = await res.json();
-          for (const r of data) {
-            if (
-              r.info_hash !== "0000000000000000000000000000000000000000" &&
-              r.name !== "No results returned" &&
-              !seenHashes.has(r.info_hash)
-            ) {
-              seenHashes.add(r.info_hash);
-              allResults.push(r);
-            }
-          }
+      const data = await searchApiBay(sq);
+      for (const r of data) {
+        if (
+          r.info_hash !== "0000000000000000000000000000000000000000" &&
+          r.name !== "No results returned" &&
+          !seenHashes.has(r.info_hash)
+        ) {
+          seenHashes.add(r.info_hash);
+          allResults.push(r);
         }
-      } catch { /* skip failed search */ }
+      }
     }
 
     const streams = allResults.map((r) => {
@@ -105,7 +135,7 @@ Deno.serve(async (req) => {
 
       return {
         name: r.name,
-        infoHash: r.info_hash,
+        infoHash: r.info_hash.toLowerCase(),
         seeds,
         leechers: parseInt(r.leechers) || 0,
         size,
@@ -116,14 +146,12 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Sort: PT-BR first, then by seeds descending
     streams.sort((a, b) => {
       if (a.ptBr && !b.ptBr) return -1;
       if (!a.ptBr && b.ptBr) return 1;
       return b.seeds - a.seeds;
     });
 
-    // Filter out very low seed torrents (keep at least some)
     const viable = streams.filter((s) => s.seeds >= 2);
     const result = viable.length >= 3 ? viable : streams;
 

@@ -28,18 +28,16 @@ function qualityColor(q: string) {
 }
 
 function getMagnetLink(stream: TorrentStream): string {
+  // ONLY WebSocket trackers work in browser (UDP/TCP blocked by browser security model)
+  // These are the trackers used by WebTorrent official and work over HTTPS
   const trackers = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://exodus.desync.com:6969/announce",
-    "udp://open.demonii.com:1337/announce",
-    "udp://tracker.openbittorrent.com:6969/announce",
-    "wss://tracker.btorrent.xyz",
     "wss://tracker.openwebtorrent.com",
-    "wss://tracker.webtorrent.dev",
+    "wss://tracker.files.fm:7073/announce",
+    "wss://tracker.btorrent.xyz",
+    "wss://spacetradersapi-chatbox.herokuapp.com:443/announce",
   ].map((t) => `&tr=${encodeURIComponent(t)}`).join("");
-  return `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodeURIComponent(stream.name)}${trackers}`;
+  // infoHash must be lowercase for WebTorrent
+  return `magnet:?xt=urn:btih:${stream.infoHash.toLowerCase()}&dn=${encodeURIComponent(stream.name)}${trackers}`;
 }
 
 // Declare WebTorrent global loaded from CDN
