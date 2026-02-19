@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Loader2, AlertTriangle, Volume2, Wifi, HardDrive, Play } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Loader2, AlertTriangle, Volume2, Wifi, HardDrive, Play, ArrowLeft, Users, Download } from "lucide-react";
 
 interface TorrentStream {
   name: string;
@@ -35,18 +35,30 @@ function getMagnetLink(stream: TorrentStream): string {
     "udp://exodus.desync.com:6969/announce",
     "udp://open.demonii.com:1337/announce",
     "udp://tracker.openbittorrent.com:6969/announce",
-    "udp://tracker.internetwarriors.net:1337/announce",
-    "udp://tracker.leechers-paradise.org:6969/announce",
+    "wss://tracker.btorrent.xyz",
+    "wss://tracker.openwebtorrent.com",
+    "wss://tracker.webtorrent.dev",
   ].map((t) => `&tr=${encodeURIComponent(t)}`).join("");
-
   return `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodeURIComponent(stream.name)}${trackers}`;
+}
+
+// Declare WebTorrent global loaded from CDN
+declare global {
+  interface Window {
+    WebTorrent: new () => WebTorrentClient;
+  }
 }
 
 interface WebTorrentFile {
   name: string;
   length: number;
-  renderTo: (el: HTMLElement, opts?: { autoplay?: boolean; muted?: boolean }, cb?: (err: Error | null, elem: HTMLElement) => void) => void;
+  renderTo: (
+    el: HTMLElement | string,
+    opts?: Record<string, unknown>,
+    cb?: (err: Error | null, elem: HTMLElement) => void
+  ) => void;
   getBlobURL: (cb: (err: Error | null, url: string) => void) => void;
+  streamTo: (elem: HTMLVideoElement) => void;
 }
 
 interface WebTorrentTorrent {
@@ -58,195 +70,253 @@ interface WebTorrentTorrent {
   downloaded: number;
   length: number;
   done: boolean;
+  ready: boolean;
   on: (event: string, cb: (...args: unknown[]) => void) => void;
-  destroy: () => void;
-}
-
-interface WebTorrentClient {
-  add: (magnetOrHash: string, opts: Record<string, unknown>, cb?: (torrent: WebTorrentTorrent) => void) => WebTorrentTorrent;
+  off: (event: string, cb: (...args: unknown[]) => void) => void;
   destroy: (cb?: () => void) => void;
 }
 
-// WebTorrent Player Component
+interface WebTorrentClient {
+  add: (
+    magnetOrHash: string,
+    opts?: Record<string, unknown>,
+    cb?: (torrent: WebTorrentTorrent) => void
+  ) => WebTorrentTorrent;
+  destroy: (cb?: () => void) => void;
+  on: (event: string, cb: (...args: unknown[]) => void) => void;
+}
+
+function loadWebTorrentCDN(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.WebTorrent) return resolve();
+    const existing = document.getElementById("webtorrent-cdn");
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", reject);
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "webtorrent-cdn";
+    script.src = "https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Falha ao carregar WebTorrent"));
+    document.head.appendChild(script);
+  });
+}
+
+// WebTorrent Video Player using CDN build
 function WebTorrentVideoPlayer({ stream, onBack }: { stream: TorrentStream; onBack: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<WebTorrentClient | null>(null);
-  const [status, setStatus] = useState<"connecting" | "downloading" | "playing" | "error">("connecting");
+  const [status, setStatus] = useState<"loading-lib" | "connecting" | "buffering" | "playing" | "error">("loading-lib");
   const [progress, setProgress] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [numPeers, setNumPeers] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const destroyedRef = useRef(false);
 
-  useEffect(() => {
-    let destroyed = false;
-    let torrent: WebTorrentTorrent | null = null;
+  const formatSpeed = (bps: number) => {
+    if (bps >= 1048576) return `${(bps / 1048576).toFixed(1)} MB/s`;
+    if (bps >= 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
+    return `${bps} B/s`;
+  };
 
-    async function startTorrent() {
-      try {
-        setStatus("connecting");
+  const startStreaming = useCallback(async () => {
+    destroyedRef.current = false;
+    try {
+      setStatus("loading-lib");
+      await loadWebTorrentCDN();
+      if (destroyedRef.current) return;
 
-        // Dynamically import WebTorrent (browser-compatible)
-        const WebTorrent = (await import("webtorrent")).default;
-        if (destroyed) return;
+      setStatus("connecting");
+      const client = new window.WebTorrent();
+      clientRef.current = client;
 
-        const client: WebTorrentClient = new WebTorrent() as unknown as WebTorrentClient;
-        clientRef.current = client;
+      client.on("error", (err: unknown) => {
+        if (destroyedRef.current) return;
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Erro no cliente WebTorrent");
+      });
 
-        const magnet = getMagnetLink(stream);
-        setStatus("downloading");
+      const magnet = getMagnetLink(stream);
 
-        torrent = client.add(magnet, { announce: [] }, (t: WebTorrentTorrent) => {
-          if (destroyed) return;
+      const torrent = client.add(magnet, {}, (t: WebTorrentTorrent) => {
+        if (destroyedRef.current) return;
 
-          // Find the largest video file
-          const videoFile = t.files
-            .filter((f) => /\.(mp4|mkv|avi|mov|webm|m4v|ts)$/i.test(f.name))
-            .sort((a, b) => b.length - a.length)[0];
+        // Find largest video file
+        const videoFile = [...t.files]
+          .filter((f) => /\.(mp4|mkv|avi|mov|webm|m4v|ts|ogv)$/i.test(f.name))
+          .sort((a, b) => b.length - a.length)[0];
 
-          if (!videoFile) {
-            setStatus("error");
-            setErrorMsg("Nenhum arquivo de vídeo encontrado neste torrent.");
-            return;
-          }
+        if (!videoFile) {
+          setStatus("error");
+          setErrorMsg("Nenhum arquivo de vídeo encontrado neste torrent.");
+          return;
+        }
 
-          if (videoRef.current) {
-            videoFile.renderTo(videoRef.current, { autoplay: true }, (err) => {
-              if (err) {
-                // Fallback: getBlobURL
-                videoFile.getBlobURL((blobErr, url) => {
-                  if (blobErr || !url) {
-                    setStatus("error");
-                    setErrorMsg("Erro ao carregar o vídeo. Tente outro torrent.");
-                    return;
-                  }
-                  if (videoRef.current && !destroyed) {
-                    videoRef.current.src = url;
-                    videoRef.current.play().catch(() => {});
-                    setStatus("playing");
-                  }
-                });
-              } else {
-                if (!destroyed) setStatus("playing");
+        setStatus("buffering");
+
+        // Use renderTo with the video element
+        videoFile.renderTo(videoRef.current!, { autoplay: true, muted: false }, (err) => {
+          if (destroyedRef.current) return;
+          if (err) {
+            // Fallback: getBlobURL
+            videoFile.getBlobURL((blobErr, url) => {
+              if (destroyedRef.current) return;
+              if (blobErr || !url) {
+                setStatus("error");
+                setErrorMsg("Erro ao carregar o vídeo. Tente outro torrent com mais seeds.");
+                return;
+              }
+              if (videoRef.current) {
+                videoRef.current.src = url;
+                videoRef.current.play().catch(() => {});
+                setStatus("playing");
               }
             });
+          } else {
+            setStatus("playing");
           }
         });
+      });
 
-        if (torrent) {
-          torrent.on("download", () => {
-            if (destroyed) return;
-            setProgress(Math.round((torrent!.progress || 0) * 100));
-            setDownloadSpeed(Math.round((torrent!.downloadSpeed || 0) / 1024));
-            setNumPeers(torrent!.numPeers || 0);
-          });
+      // Progress tracking
+      const onDownload = () => {
+        if (destroyedRef.current) return;
+        setProgress(Math.round((torrent.progress || 0) * 100));
+        setDownloadSpeed(torrent.downloadSpeed || 0);
+        setNumPeers(torrent.numPeers || 0);
+      };
 
-          torrent.on("error", (err: unknown) => {
-            if (destroyed) return;
-            setStatus("error");
-            setErrorMsg(err instanceof Error ? err.message : "Erro no torrent. Tente outro.");
-          });
-        }
-      } catch (e) {
-        if (!destroyed) {
-          setStatus("error");
-          setErrorMsg(e instanceof Error ? e.message : "Erro ao iniciar o WebTorrent.");
-        }
+      torrent.on("download", onDownload);
+      torrent.on("noPeers", () => {
+        if (destroyedRef.current) return;
+        setNumPeers(0);
+      });
+      torrent.on("error", (err: unknown) => {
+        if (destroyedRef.current) return;
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Erro no torrent. Tente outro com mais seeds.");
+      });
+
+      // Poll progress every 2s
+      const interval = setInterval(() => {
+        if (destroyedRef.current) { clearInterval(interval); return; }
+        setProgress(Math.round((torrent.progress || 0) * 100));
+        setDownloadSpeed(torrent.downloadSpeed || 0);
+        setNumPeers(torrent.numPeers || 0);
+      }, 2000);
+
+      // Store interval cleanup
+      (clientRef as unknown as { interval?: ReturnType<typeof setInterval> }).interval = interval;
+
+    } catch (e) {
+      if (!destroyedRef.current) {
+        setStatus("error");
+        setErrorMsg(e instanceof Error ? e.message : "Erro ao iniciar streaming.");
       }
     }
+  }, [stream]);
 
-    startTorrent();
-
+  useEffect(() => {
+    startStreaming();
     return () => {
-      destroyed = true;
+      destroyedRef.current = true;
+      const c = clientRef as unknown as { interval?: ReturnType<typeof setInterval> };
+      if (c.interval) clearInterval(c.interval);
       if (clientRef.current) {
         try { clientRef.current.destroy(); } catch { /* ignore */ }
         clientRef.current = null;
       }
     };
-  }, [stream]);
+  }, [startStreaming]);
+
+  const isLoading = status === "loading-lib" || status === "connecting" || status === "buffering";
 
   return (
     <div className="flex flex-col h-full bg-black">
       {/* Info bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-card/80 border-b border-border/30 flex-shrink-0 gap-2">
+      <div className="flex items-center justify-between px-3 py-2 bg-black/90 border-b border-white/10 flex-shrink-0 gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors flex-shrink-0"
+          >
+            <ArrowLeft className="w-3 h-3" /> Trocar
+          </button>
           {stream.ptBr && (
-            <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border flex-shrink-0"
+            <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0"
               style={{ color: "hsl(142 70% 45%)", borderColor: "hsl(142 70% 45% / 0.3)", backgroundColor: "hsl(142 70% 45% / 0.1)" }}>
               🇧🇷 <Volume2 className="w-2.5 h-2.5" />
             </span>
           )}
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${qualityColor(stream.quality)}`}>
+          <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${qualityColor(stream.quality)}`}>
             {stream.quality}
           </span>
-          <span className="text-xs text-muted-foreground truncate">{stream.name}</span>
+          <span className="text-xs text-white/40 truncate hidden sm:block">{stream.name}</span>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {status === "downloading" && (
-            <>
-              <span className="text-xs text-green-400">{numPeers} peers</span>
-              <span className="text-xs text-blue-400">{downloadSpeed} KB/s</span>
-              <span className="text-xs text-muted-foreground">{progress}%</span>
-            </>
-          )}
-          <span className="flex items-center gap-1 text-xs" style={{ color: "hsl(142 70% 45%)" }}>
+        <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+          <span className="flex items-center gap-1 text-green-400">
+            <Users className="w-3 h-3" /> {numPeers}
+          </span>
+          <span className="flex items-center gap-1 text-blue-400">
+            <Download className="w-3 h-3" /> {formatSpeed(downloadSpeed)}
+          </span>
+          <span className="flex items-center gap-1" style={{ color: "hsl(142 70% 45%)" }}>
             <Wifi className="w-3 h-3" /> {stream.seeds}
           </span>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="text-white/40 flex items-center gap-1">
             <HardDrive className="w-3 h-3" /> {stream.size}
           </span>
-          <button onClick={onBack} className="text-xs text-primary hover:text-primary/80 underline">
-            Trocar
-          </button>
         </div>
       </div>
 
-      {/* Video area */}
-      <div className="flex-1 relative flex items-center justify-center" ref={containerRef}>
-        {/* Status overlay */}
-        {status !== "playing" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/80 gap-4">
-            {status === "connecting" && (
-              <>
-                <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Conectando aos peers...</p>
-              </>
-            )}
-            {status === "downloading" && (
-              <>
-                <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                <p className="text-sm font-medium text-foreground">Carregando stream...</p>
-                <p className="text-xs text-muted-foreground">{numPeers} peers · {downloadSpeed} KB/s · {progress}%</p>
-                <div className="w-48 h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${Math.max(progress, 2)}%` }}
-                  />
+      {/* Video + overlay */}
+      <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black gap-4">
+            <Loader2 className="w-12 h-12 animate-spin text-primary" />
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium text-white">
+                {status === "loading-lib" && "Carregando player..."}
+                {status === "connecting" && "Conectando aos peers..."}
+                {status === "buffering" && "Buffering..."}
+              </p>
+              {numPeers > 0 && (
+                <p className="text-xs text-white/50">{numPeers} peers · {formatSpeed(downloadSpeed)}</p>
+              )}
+              {progress > 0 && (
+                <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden mx-auto mt-2">
+                  <div className="h-full bg-primary transition-all duration-500 rounded-full" style={{ width: `${Math.max(progress, 1)}%` }} />
                 </div>
-                <p className="text-xs text-muted-foreground/60">O vídeo iniciará automaticamente quando houver dados suficientes</p>
-              </>
-            )}
-            {status === "error" && (
-              <>
-                <AlertTriangle className="w-10 h-10 text-destructive" />
-                <p className="text-sm text-destructive text-center px-4">{errorMsg}</p>
-                <button
-                  onClick={onBack}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium"
-                >
-                  Tentar outro torrent
-                </button>
-              </>
-            )}
+              )}
+              <p className="text-xs text-white/30 mt-2 max-w-xs">
+                Streaming P2P direto no navegador. Aguarde os peers se conectarem.
+              </p>
+            </div>
           </div>
         )}
+
+        {status === "error" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black gap-4 px-6">
+            <AlertTriangle className="w-12 h-12 text-destructive" />
+            <p className="text-sm text-white/70 text-center">{errorMsg}</p>
+            <button
+              onClick={onBack}
+              className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Escolher outro torrent
+            </button>
+          </div>
+        )}
+
         <video
           ref={videoRef}
-          className="w-full h-full"
+          className="w-full h-full object-contain"
           controls
           autoPlay
-          style={{ maxHeight: "calc(100vh - 100px)" }}
+          playsInline
+          style={{ display: status === "error" ? "none" : "block" }}
         />
       </div>
     </div>
@@ -292,12 +362,12 @@ export default function TorrentPlayer({ contentTitle, year, type, season, episod
         const allStreams: TorrentStream[] = data.streams || [];
 
         if (allStreams.length === 0) {
-          setError("Nenhum torrent encontrado para este conteúdo.");
+          setError("Nenhum torrent encontrado. Tente buscar por outro título.");
         } else {
           setStreams(allStreams);
         }
       } catch {
-        setError("Não foi possível buscar torrents. Tente novamente.");
+        setError("Não foi possível buscar torrents. Verifique sua conexão.");
       } finally {
         setLoading(false);
       }
@@ -312,12 +382,7 @@ export default function TorrentPlayer({ contentTitle, year, type, season, episod
   }, [contentTitle, year, type, season, episode]);
 
   if (selectedStream) {
-    return (
-      <WebTorrentVideoPlayer
-        stream={selectedStream}
-        onBack={() => setSelectedStream(null)}
-      />
-    );
+    return <WebTorrentVideoPlayer stream={selectedStream} onBack={() => setSelectedStream(null)} />;
   }
 
   if (loading) {
@@ -338,7 +403,6 @@ export default function TorrentPlayer({ contentTitle, year, type, season, episod
     );
   }
 
-  // Torrent list
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 border-b border-border/30 flex-shrink-0">
@@ -346,7 +410,7 @@ export default function TorrentPlayer({ contentTitle, year, type, season, episod
           {streams.length} torrents encontrados
         </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Selecione um torrent com mais seeds para melhor experiência
+          🇧🇷 PT-BR primeiro · Selecione com mais seeds para melhor streaming
         </p>
       </div>
 
