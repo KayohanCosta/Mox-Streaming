@@ -169,6 +169,22 @@ export async function fetchSimilar(id: number, type: "movie" | "tv"): Promise<Me
   return data.results.map((item) => ({ ...item, media_type: type }));
 }
 
+export async function fetchCertification(id: number, type: "movie" | "tv"): Promise<string | null> {
+  if (type === "movie") {
+    const data = await tmdbFetch<{ results: { iso_3166_1: string; release_dates: { certification: string }[] }[] }>(
+      `movie/${id}/release_dates`
+    );
+    const br = data.results.find((r) => r.iso_3166_1 === "BR");
+    const cert = br?.release_dates?.find((r) => r.certification)?.certification;
+    return cert || null;
+  }
+  const data = await tmdbFetch<{ results: { iso_3166_1: string; rating: string }[] }>(
+    `tv/${id}/content_ratings`
+  );
+  const br = data.results.find((r) => r.iso_3166_1 === "BR");
+  return br?.rating || null;
+}
+
 export async function searchMulti(
   query: string,
   page = 1

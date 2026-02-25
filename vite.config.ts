@@ -11,6 +11,14 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      "/iptv": {
+        target: "http://dgon.me",
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/iptv/, "/get.php"),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

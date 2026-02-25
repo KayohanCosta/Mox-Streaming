@@ -1,4 +1,0 @@
-project_id = "aaskbosifgieohpgvtvz"
-
-[functions.torrent-search]
-verify_jwt = false

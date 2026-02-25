@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
+import { fetchDetails, fetchSeasonEpisodes, fetchVideos, fetchSimilar, fetchCertification, MediaDetails, MediaItem, Episode, VideoResult, getTitle, getYear, getRating, backdropUrl, posterUrl } from "@/lib/tmdb";
 import ContentRow from "@/components/ContentRow";
 import Navbar from "@/components/Navbar";
-import { Star, Clock, Calendar, Play, X, Youtube, Mic, Subtitles, Download } from "lucide-react";
-import TorrentPlayer from "@/components/TorrentPlayer";
+import { Star, Clock, Calendar, Play, X, Youtube } from "lucide-react";
+import IPTVPlayer from "@/components/IPTVPlayer";
 import { saveWatchProgress } from "@/hooks/useWatchProgress";
+import { findStreamInIPTVList } from "@/lib/iptv";
 
-type PlayerSource = "dublado-warez" | "dublado-superflix" | "legendado" | "torrent";
-type PlayerTab = "dublado" | "legendado" | "torrent";
+type PlayerSource = "iptv-1" | "iptv-2" | "iptv-3";
+type PlayerTab = "iptv-1" | "iptv-2" | "iptv-3";
 
 interface PlayerState {
   open: boolean;
@@ -27,12 +28,13 @@ export default function DetailsPage() {
   const [trailerKey, setTrailerKey] = useState<string | null>(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [similar, setSimilar] = useState<MediaItem[]>([]);
-  const [player, setPlayer] = useState<PlayerState>({ open: false, tab: "dublado", source: "dublado-warez" });
+  const [certification, setCertification] = useState<string>("L");
+  const [player, setPlayer] = useState<PlayerState>({ open: false, tab: "iptv-1", source: "iptv-1" });
 
   useEffect(() => {
     if (!id || !type) return;
     setLoading(true);
-    setPlayer({ open: false, tab: "dublado", source: "dublado-warez" });
+    setPlayer({ open: false, tab: "iptv-1", source: "iptv-1" });
     fetchDetails(Number(id), type as "movie" | "tv")
       .then((data) => {
         setDetails(data);
@@ -56,7 +58,20 @@ export default function DetailsPage() {
     fetchSimilar(Number(id), type as "movie" | "tv")
       .then(setSimilar)
       .catch(console.error);
+
+    fetchCertification(Number(id), type as "movie" | "tv")
+      .then((c) => setCertification(c || "L"))
+      .catch(() => setCertification("L"));
   }, [id, type]);
+
+  useEffect(() => {
+    if (player.open) {
+      document.body.classList.add("overflow-hidden");
+    } else {
+      document.body.classList.remove("overflow-hidden");
+    }
+    return () => document.body.classList.remove("overflow-hidden");
+  }, [player.open]);
 
   const handleSeasonChange = (seasonNum: number) => {
     setSelectedSeason(seasonNum);
@@ -66,7 +81,7 @@ export default function DetailsPage() {
   };
 
   const openPlayer = useCallback((seasonNum?: number, episodeNum?: number) => {
-    setPlayer({ open: true, tab: "dublado", source: "dublado-warez", seasonNum, episodeNum });
+    setPlayer({ open: true, tab: "iptv-1", source: "iptv-1", seasonNum, episodeNum });
 
     // Save to "continue watching"
     if (details) {
@@ -84,42 +99,28 @@ export default function DetailsPage() {
 
   const closePlayer = () => setPlayer(p => ({ ...p, open: false }));
 
-  const getPlayerUrl = useCallback((source: PlayerSource, sNum?: number, eNum?: number): string => {
-    if (!id) return "";
-    const isMovie = type === "movie";
-    const contentType = isMovie ? "movie" : "tv";
-    const contentTypeMap: Record<string, Record<string, string>> = {
-      movie: { warezcdn: "filme", superflix: "filme", vidsrcme: "movie" },
-      tv: { warezcdn: "serie", superflix: "serie", vidsrcme: "tv" },
-    };
 
-    switch (source) {
-      case "dublado-warez": {
-        const mapped = contentTypeMap[contentType].warezcdn;
-        let url = `https://warezcdn.site/${mapped}/${id}`;
-        if (sNum && eNum && !isMovie) url += `/${sNum}/${eNum}`;
-        return url;
-      }
-      case "dublado-superflix": {
-        const mapped = contentTypeMap[contentType].superflix;
-        let url = `https://superflixapi.one/${mapped}/${id}`;
-        if (sNum && eNum && !isMovie) url += `/${sNum}/${eNum}`;
-        return url;
-      }
-      case "legendado": {
-        const mapped = contentTypeMap[contentType].vidsrcme;
-        let url = `https://vidsrcme.ru/embed/${mapped}/${id}`;
-        if (sNum && eNum && !isMovie) url += `/${sNum}-${eNum}`;
-        return url;
-      }
-      case "torrent":
-        return isMovie
-          ? `https://web.stremio.com/#/detail/movie/tmdb:${id}`
-          : `https://web.stremio.com/#/detail/series/tmdb:${id}:${sNum}:${eNum}`;
-      default:
-        return "";
-    }
-  }, [id, type]);
+
+  const getPlayerUrl = useCallback(
+    async (source: PlayerSource, sNum?: number, eNum?: number): Promise<string> => {
+      if (!id) return "";
+      const title = details
+        ? (details.original_title || details.original_name || getTitle(details))
+        : undefined;
+      const altTitle = details ? getTitle(details) : undefined;
+      const streamUrl = await findStreamInIPTVList({
+        tmdbId: id,
+        type: type === "movie" ? "movie" : "tv",
+        season: sNum,
+        episode: eNum,
+        title,
+        altTitle,
+        year: details ? getYear(details) : undefined,
+      });
+      return streamUrl ?? "";
+    },
+    [id, type, details]
+  );
 
   if (loading) {
     return (
@@ -165,85 +166,17 @@ export default function DetailsPage() {
 
       {/* Player Modal with Tabs */}
       {player.open && (
-        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col animate-fade-in">
-          {/* Top bar with tabs and close */}
-          <div className="flex items-center justify-between px-4 py-3 bg-card/80 backdrop-blur-sm border-b border-border/30">
-            <div className="flex gap-1">
-              {([
-                { tab: "dublado" as PlayerTab, icon: Mic, label: "Dublado" },
-                { tab: "legendado" as PlayerTab, icon: Subtitles, label: "Legendado" },
-                { tab: "torrent" as PlayerTab, icon: Download, label: "Torrent" },
-              ]).map(({ tab, icon: Icon, label }) => (
-                <button
-                  key={tab}
-                  onClick={() => setPlayer(p => ({
-                    ...p,
-                    tab,
-                    source: tab === "dublado" ? "dublado-warez" : tab === "legendado" ? "legendado" : "torrent",
-                  }))}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    player.tab === tab
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Sub-sources for Dublado */}
-            {player.tab === "dublado" && (
-              <div className="flex gap-1">
-                {([
-                  { source: "dublado-warez" as PlayerSource, label: "WarezCDN" },
-                  { source: "dublado-superflix" as PlayerSource, label: "SuperFlix" },
-                ]).map(({ source, label }) => (
-                  <button
-                    key={source}
-                    onClick={() => setPlayer(p => ({ ...p, source }))}
-                    className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                      player.source === source
-                        ? "bg-accent text-accent-foreground"
-                        : "bg-secondary/30 text-muted-foreground hover:bg-secondary/60"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={closePlayer}
-              className="bg-destructive hover:bg-destructive/80 text-destructive-foreground px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-2"
-            >
-              <X className="w-4 h-4" /> Fechar
-            </button>
-          </div>
-
-          {/* Player content */}
+        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col animate-fade-in overflow-hidden">
           <div className="flex-1 relative">
-            {player.source === "torrent" ? (
-              <TorrentPlayer
-                contentTitle={originalTitle}
-                year={year}
-                type={type === "movie" ? "movie" : "tv"}
-                season={player.seasonNum}
-                episode={player.episodeNum}
-              />
-            ) : (
-              <iframe
-                key={player.source}
-                src={getPlayerUrl(player.source, player.seasonNum, player.episodeNum)}
-                className="w-full h-full"
-                frameBorder="0"
-                allowFullScreen
-                allow="autoplay; encrypted-media; fullscreen"
-                referrerPolicy="origin"
-              />
-            )}
+            <IPTVPlayer
+              contentTitle={title}
+              year={year}
+              source={player.source}
+              season={player.seasonNum}
+              episode={player.episodeNum}
+              getStreamUrl={getPlayerUrl}
+              certification={certification}
+            />
           </div>
         </div>
       )}
