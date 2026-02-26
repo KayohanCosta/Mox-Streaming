@@ -61,12 +61,7 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
                   className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-110"
                   loading="lazy"
                 />
-                {/* Season/Episode badge */}
-                {item.type === "tv" && item.season && item.episode && (
-                  <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">
-                    S{item.season}:E{item.episode}
-                  </div>
-                )}
+                {/* Removido badge S1:E1 */}
                 {/* Play overlay */}
                 <div className="absolute inset-0 flex items-center justify-center bg-background/40 opacity-0 group-hover/card:opacity-100 transition-opacity">
                   <Play className="w-10 h-10 text-primary fill-current" />
@@ -79,8 +74,31 @@ export default function ContinueWatchingRow({ items }: ContinueWatchingRowProps)
                   />
                 </div>
               </div>
-              <h3 className="text-sm font-medium mt-2 truncate">{item.title}</h3>
-              <p className="text-xs text-muted-foreground">{item.progress}% assistido</p>
+              <div className="mt-2 flex flex-col justify-between min-h-[54px]">
+                <div>
+                  {item.type === 'tv' && item.season && item.episode && (
+                    <div className="text-xs font-semibold text-white mb-0.5 truncate">
+                      T{item.season}:E{item.episode} {item.episode_title && `"${item.episode_title}"`}
+                    </div>
+                  )}
+                  <h3 className="text-sm font-medium truncate">{item.title}</h3>
+                </div>
+                {item.duration && item.currentTime ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-1 rounded bg-zinc-700 overflow-hidden">
+                      <div
+                        className="h-full bg-red-600"
+                        style={{ width: `${Math.min(100, Math.round((item.currentTime / item.duration) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-zinc-300 whitespace-nowrap">
+                      {Math.floor(item.currentTime)} de {Math.floor(item.duration)}min
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-4" />
+                )}
+              </div>
             </div>
           ))}
         </div>

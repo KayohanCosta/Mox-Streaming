@@ -104,23 +104,24 @@ export default function HeroBanner({ items, isLoading }: HeroBannerProps) {
       {/* Navigation arrows */}
       <button
         onClick={() => goTo((current - 1 + items.length) % items.length)}
-        className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/50 hover:bg-background/80 p-2 rounded-full transition-colors z-10"
+          className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/50 hover:bg-background/80 p-2 rounded-full transition-colors z-40"
       >
         <ChevronLeft className="w-5 h-5" />
       </button>
       <button
         onClick={() => goTo((current + 1) % items.length)}
-        className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/50 hover:bg-background/80 p-2 rounded-full transition-colors z-10"
+          className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/50 hover:bg-background/80 p-2 rounded-full transition-colors z-40"
       >
         <ChevronRight className="w-5 h-5" />
       </button>
 
       {/* Dots */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+      <div className="absolute bottom-24 md:bottom-30 right-8 md:right-12 flex gap-3 z-[120] pointer-events-auto">
         {items.slice(0, 10).map((_, i) => (
           <button
             key={i}
             onClick={() => goTo(i)}
+            aria-label={`Ir para slide ${i + 1}`}
             className={`h-1.5 rounded-full transition-all duration-300 ${
               i === current ? "w-8 bg-primary" : "w-3 bg-foreground/30 hover:bg-foreground/50"
             }`}

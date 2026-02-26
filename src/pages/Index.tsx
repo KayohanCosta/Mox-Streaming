@@ -53,12 +53,12 @@ const Index = () => {
       <div className="-mt-20 relative z-10 pb-12">
         <ContinueWatchingRow items={watchProgress} />
         <Top10Row items={top10} isLoading={loading} />
-        <ContentRow title="🔥 Em Alta no Brasil" items={trending} mediaType="trending" isLoading={loading} />
-        <ContentRow title="🎬 Filmes Populares" items={movies} mediaType="filme" isLoading={loading} />
-        <ContentRow title="📺 Séries Mais Bem Avaliadas" items={series} mediaType="serie" isLoading={loading} />
-        <ContentRow title="⚡ Animes" items={anime} mediaType="anime" isLoading={loading} />
-        <ContentRow title="🌸 Doramas" items={doramas} mediaType="dorama" isLoading={loading} />
-        <ContentRow title="🇧🇷 Novelas" items={novelas} mediaType="novela" isLoading={loading} />
+        <ContentRow title="Em Alta no Brasil" items={trending} mediaType="trending" isLoading={loading} />
+        <ContentRow title="Filmes Populares" items={movies} mediaType="filme" isLoading={loading} />
+        <ContentRow title="Séries Mais Bem Avaliadas" items={series} mediaType="serie" isLoading={loading} />
+        <ContentRow title="Animes" items={anime} mediaType="anime" isLoading={loading} />
+        <ContentRow title="Doramas" items={doramas} mediaType="dorama" isLoading={loading} />
+        <ContentRow title="Novelas" items={novelas} mediaType="novela" isLoading={loading} />
       </div>
     </div>
   );

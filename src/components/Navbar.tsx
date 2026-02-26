@@ -80,8 +80,8 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-primary font-black text-2xl tracking-tight">MOX</span>
-            <span className="text-foreground font-light text-lg hidden sm:inline">Streaming</span>
+            <span className="text-primary font-black text-[2rem] tracking-tight">MOX</span>
+            <span className="text-foreground font-light text-xl hidden sm:inline">Streaming</span>
           </Link>
 
           {/* Desktop Nav */}
@@ -90,7 +90,7 @@ export default function Navbar() {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
+                className={`text-base font-medium transition-colors hover:text-primary ${
                   location.pathname === item.path ? "text-primary" : "text-foreground/70"
                 }`}
               >
@@ -102,24 +102,24 @@ export default function Navbar() {
           {/* Search & Mobile toggle */}
           <div className="flex items-center gap-3">
             {searchOpen ? (
-              <div ref={containerRef} className="relative">
-                <form onSubmit={handleSearch} className="flex items-center">
+              <div ref={containerRef} className="relative w-[clamp(15rem,34vw,30rem)] max-w-[56vw]">
+                <form onSubmit={handleSearch} className="flex items-center rounded-xl overflow-hidden border border-primary/40 bg-secondary/90 shadow-lg">
                   <input
                     autoFocus
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                     placeholder="Buscar filmes, séries..."
-                    className="bg-secondary text-foreground text-sm rounded-l-lg px-4 py-2 w-48 md:w-72 focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="flex-1 min-w-0 bg-transparent text-foreground text-base px-4 py-2.5 focus:outline-none placeholder:text-foreground/55"
                   />
-                  <button type="submit" className="bg-primary text-primary-foreground px-3 py-2 rounded-r-lg">
-                    <Search className="w-4 h-4" />
+                  <button type="submit" className="bg-primary text-primary-foreground px-4 py-2.5 hover:bg-primary/85 transition-colors border-l border-primary/40">
+                    <Search className="w-5 h-5" />
                   </button>
                 </form>
 
                 {/* Suggestions Dropdown */}
                 {showSuggestions && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-50 animate-fade-in">
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in">
                     {suggestions.map((item) => (
                       <button
                         key={item.id}

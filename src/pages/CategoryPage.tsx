@@ -6,11 +6,11 @@ import Navbar from "@/components/Navbar";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 
 const categoryLabels: Record<string, string> = {
-  movies: "🎬 Filmes Populares",
-  series: "📺 Séries",
-  anime: "⚡ Animes",
-  doramas: "🌸 Doramas",
-  novelas: "🇧🇷 Novelas",
+  movies: "Filmes Populares",
+  series: "Séries",
+  anime: "Animes",
+  doramas: "Doramas",
+  novelas: "Novelas",
 };
 
 export default function CategoryPage() {
