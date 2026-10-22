@@ -1,0 +1,9 @@
+project_id = "mox-streaming"
+
+# Public catalog; account routes verify the user token inside the handler.
+[functions.mox-api]
+verify_jwt = false
+
+# Fixed-scope worker with a database lease and global rate limit.
+[functions.mox-catalog-sync]
+verify_jwt = false

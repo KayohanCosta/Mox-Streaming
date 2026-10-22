@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { fetchCategory, CATEGORIES, MediaItem, getTitle, getYear, getRating, posterUrl } from "@/lib/tmdb";
-import { useNavigate } from "react-router-dom";
+import { fetchCategory, CATEGORIES, MediaItem } from "@/lib/tmdb";
+import MediaCard from "@/components/MediaCard";
+import SiteFooter from "@/components/SiteFooter";
 import Navbar from "@/components/Navbar";
-import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const categoryLabels: Record<string, string> = {
   movies: "Filmes Populares",
@@ -15,25 +16,35 @@ const categoryLabels: Record<string, string> = {
 
 export default function CategoryPage() {
   const { category } = useParams<{ category: string }>();
+  return <CategoryBrowser key={category} category={category}/>;
+}
+
+function CategoryBrowser({category}:{category?:string}) {
+  const [year,setYear]=useState("");
+  const [error,setError]=useState(false);
   const [items, setItems] = useState<MediaItem[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
-  const endpoint = CATEGORIES[category as keyof typeof CATEGORIES];
+  const baseEndpoint = CATEGORIES[category as keyof typeof CATEGORIES];
+  const endpoint=year&&baseEndpoint?(category==="movies"?`discover/movie?sort_by=popularity.desc&vote_count.gte=1000&primary_release_year=${year}`:category==="series"?`discover/tv?sort_by=vote_average.desc&vote_count.gte=1000&first_air_date_year=${year}`:`${baseEndpoint}&first_air_date_year=${year}`):baseEndpoint;
 
   useEffect(() => {
     if (!endpoint) return;
-    setLoading(true);
+    let active=true;
+    setLoading(true);setError(false);
     fetchCategory(endpoint, page)
       .then((data) => {
+        if(!active)return;
         setItems(data.results);
-        setTotalPages(Math.min(data.total_pages, 20));
+        setTotalPages(Math.max(1,Math.min(data.total_pages,500)));
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(()=>{if(active)setError(true);})
+      .finally(() => {if(active)setLoading(false);});
+    return()=>{active=false;};
   }, [endpoint, page]);
+
 
   const mediaType = category === "movies" ? "movie" : "tv";
 
@@ -49,8 +60,10 @@ export default function CategoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-24 px-4 md:px-8 max-w-[1400px] mx-auto pb-12">
-        <h1 className="text-2xl font-bold mb-8">{categoryLabels[category!] || category}</h1>
+      <div className="browse-page">
+        <div className="browse-heading"><div><span className="eyebrow">EXPLORE O CATÁLOGO</span><h1 className="browse-title">{categoryLabels[category!] || category}</h1></div><label className="browse-year"><span>Ano de lançamento</span><select aria-label="Ano de lançamento" value={year} onChange={event=>{setYear(event.target.value);setPage(1);}}><option value="">Todos os anos</option>{Array.from({length:new Date().getFullYear()-1870+2},(_,i)=>new Date().getFullYear()+1-i).map(value=><option key={value} value={value}>{value}</option>)}</select></label></div>
+        <p className="browse-limit-note">Explore as páginas disponíveis. Filtre por ano para aprofundar sua busca.</p>
+        {error&&<p role="alert" className="mb-8 text-sm text-amber-200">Não foi possível carregar esta página. Tente novamente em instantes.</p>}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {loading
@@ -58,36 +71,16 @@ export default function CategoryPage() {
                 <div key={i} className="aspect-[2/3] rounded-lg bg-muted animate-shimmer bg-gradient-to-r from-muted via-surface-hover to-muted bg-[length:200%_100%]" />
               ))
             : items.filter(i => i.poster_path).map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => navigate(`/details/${mediaType}/${item.id}`)}
-                  className="cursor-pointer group"
-                >
-                  <div className="aspect-[2/3] rounded-lg overflow-hidden bg-surface relative">
-                    <img
-                      src={posterUrl(item.poster_path)}
-                      alt={getTitle(item)}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 gradient-card opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
-                      <span className="flex items-center gap-1 text-xs text-rating font-bold">
-                        <Star className="w-3 h-3 fill-current" /> {getRating(item)}%
-                      </span>
-                    </div>
-                  </div>
-                  <h3 className="text-sm font-medium mt-2 truncate">{getTitle(item)}</h3>
-                  <p className="text-xs text-muted-foreground">{getYear(item)}</p>
-                </div>
+<MediaCard key={item.id} item={item} type={mediaType} />
               ))}
         </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-4 mt-10">
+          <div className="catalog-pagination flex justify-center items-center gap-4 mt-10">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
+              aria-label="Página anterior" disabled={loading||page === 1}
               className="bg-secondary hover:bg-surface-hover disabled:opacity-30 p-2 rounded-lg transition-colors"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -97,7 +90,7 @@ export default function CategoryPage() {
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
+              aria-label="Próxima página" disabled={loading||page >= totalPages}
               className="bg-secondary hover:bg-surface-hover disabled:opacity-30 p-2 rounded-lg transition-colors"
             >
               <ChevronRight className="w-5 h-5" />
@@ -105,6 +98,7 @@ export default function CategoryPage() {
           </div>
         )}
       </div>
+      <SiteFooter />
     </div>
   );
 }

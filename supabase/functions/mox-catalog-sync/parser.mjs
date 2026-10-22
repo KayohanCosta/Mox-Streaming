@@ -1,0 +1,12 @@
+import { parse } from 'npm:parse5@7.3.0';
+export function kindFor(path){const p=decodeURIComponent(path).toLowerCase();if(p.includes('lista-de-episodios')||p.includes('lista-de-capitulos'))return 'series';if(/(?:episodio|capitulo)-\d/.test(p)||p==='/musicvideo.php')return 'episode';if(p.includes('ao-vivo'))return 'channel';if(p==='/'||p==='/index.html'||/^\/(browse|mapa|newvideos|topvideos)/.test(p))return 'catalog';return 'title';}
+export function approvedURL(value,base){try{const b=new URL(base),u=new URL(value,b);if(u.protocol!=='https:'||u.origin!==b.origin||u.username||u.password||u.port||/\.\.|[\\\x00-\x20]/.test(decodeURIComponent(u.pathname)))return null;const legacy=u.pathname==='/musicvideo.php'&&[...u.searchParams.keys()].join()==='vid'&&/^[a-f0-9]{9,32}$/i.test(u.searchParams.get('vid')||'');if(!legacy&&(u.search||!(/^\/[^/]+\.html$/.test(u.pathname)||u.pathname==='/')))return null;u.hash='';return u.href;}catch{return null;}}
+export function follows(url){const p=new URL(url).pathname;return kindFor(p)==='series'||p==='/'||p==='/browse.html'||/^\/browse-[^/]+-videos-\d+-date\.html$/.test(p);}
+export function parseCatalog(html,base){
+ const doc=parse(html);const links=new Map();let title='';let primaryCount=0;
+ function text(n){if(n.nodeName==='#text')return n.value||'';if(['script','style'].includes(n.tagName))return '';return (n.childNodes||[]).map(text).join(' ');}
+ function attrs(n){return Object.fromEntries((n.attrs||[]).map(a=>[a.name,a.value]));}
+ function image(n){if(n.tagName==='img')return attrs(n);for(const c of n.childNodes||[]){const result=image(c);if(result)return result;}return null;}
+ function walk(n,primary=false){const a=attrs(n);primary=primary||a.id==='pm-grid'||(a.class||'').includes('pm-ul-browse-videos');if(n.tagName==='title')title=text(n).trim();if(n.tagName==='a'&&a.href){const url=approvedURL(a.href,base);if(url){const img=image(n);const name=(text(n).replace(/\s+/g,' ').trim()||a.title||img?.alt||'').trim();if(name){let image_url=null;try{const u=new URL(img?.['data-echo']||img?.['data-src']||img?.src||'',base);if(img&&u.protocol==='https:'&&u.origin===new URL(base).origin)image_url=u.href;}catch{}const old=links.get(url);links.set(url,{url,title:name,kind:kindFor(new URL(url).pathname),image_url:image_url||old?.image_url||null,is_catalog_card:primary||old?.is_catalog_card||false});if(primary)primaryCount++;}}}for(const c of n.childNodes||[])walk(c,primary);}
+ walk(doc);return {title,items:[...links.values()],primaryCount};
+}

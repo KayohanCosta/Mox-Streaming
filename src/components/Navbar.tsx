@@ -1,6 +1,8 @@
+import { activeProfileId, getProfiles } from "@/lib/profiles";
+import { ProfileAvatar } from "./ProfileGate";
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Search, Home, Film, Tv, Sparkles, Menu, X, Star } from "lucide-react";
+import { Search, Home, Film, Tv, Sparkles, Menu, X, Star, Bookmark } from "lucide-react";
 import { searchMulti, MediaItem, getTitle, getYear, getRating, posterUrl } from "@/lib/tmdb";
 
 const navItems = [
@@ -9,11 +11,14 @@ const navItems = [
   { label: "Séries", path: "/category/series", icon: Tv },
   { label: "Animes", path: "/category/anime", icon: Sparkles },
   { label: "Doramas", path: "/category/doramas", icon: Tv },
+  { label: "Novelas", path: "/category/novelas", icon: Tv },
+  { label: "Minha lista", path: "/my-list", icon: Bookmark },
 ];
 
 export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchLoading,setSearchLoading]=useState(false);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<MediaItem[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -33,26 +38,32 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(()=>{if(!searchOpen)return;const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"){setSearchOpen(false);setQuery("");setShowSuggestions(false);}};document.addEventListener("keydown",onKey);return()=>document.removeEventListener("keydown",onKey);},[searchOpen]);
+
   // Debounced search
   useEffect(() => {
+    let active=true;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (query.trim().length < 2) {
       setSuggestions([]);
-      setShowSuggestions(false);
+      setShowSuggestions(false);setSearchLoading(false);
       return;
     }
+    setSearchLoading(true);
     debounceRef.current = setTimeout(() => {
       searchMulti(query)
         .then((data) => {
+          if(!active)return;
           const filtered = data.results
             .filter((r) => r.poster_path && (r.media_type === "movie" || r.media_type === "tv"))
             .slice(0, 6);
           setSuggestions(filtered);
           setShowSuggestions(filtered.length > 0);
         })
-        .catch(console.error);
-    }, 400);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+        .catch(()=>{if(active)setSuggestions([]);})
+        .finally(()=>{if(active)setSearchLoading(false);});
+    }, 220);
+    return () => { active=false;if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -74,24 +85,24 @@ export default function Navbar() {
     setShowSuggestions(false);
   };
 
+  const profile = getProfiles().find(p => p.id === activeProfileId());
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-background/95 via-background/70 to-transparent backdrop-blur-sm">
-      <div className="px-4 md:px-12">
-        <div className="flex items-center justify-between h-16">
+    <nav className="mox-navbar fixed top-0 left-0 right-0 z-50">
+      <div className="nav-inner">
+        <div className="flex items-center justify-between h-20 gap-6">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-primary font-black text-[2rem] tracking-tight">MOX</span>
-            <span className="text-foreground font-light text-xl hidden sm:inline">Streaming</span>
+          <Link to="/" aria-label="MOX, início" className={`${searchOpen ? "hidden sm:flex" : "flex"} items-center gap-1 flex-shrink-0`}>
+            <span className="brand-wordmark">mox<span>•</span></span>
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className={`${searchOpen?"hidden 2xl:flex":"hidden xl:flex"} items-center gap-7`}>
             {navItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`text-base font-medium transition-colors hover:text-primary ${
-                  location.pathname === item.path ? "text-primary" : "text-foreground/70"
+                className={`nav-item text-sm font-medium transition-colors hover:text-foreground ${
+                  location.pathname === item.path ? "nav-active text-foreground" : "text-foreground/55"
                 }`}
               >
                 {item.label}
@@ -102,24 +113,27 @@ export default function Navbar() {
           {/* Search & Mobile toggle */}
           <div className="flex items-center gap-3">
             {searchOpen ? (
-              <div ref={containerRef} className="relative w-[clamp(15rem,34vw,30rem)] max-w-[56vw]">
-                <form onSubmit={handleSearch} className="flex items-center rounded-xl overflow-hidden border border-primary/40 bg-secondary/90 shadow-lg">
+              <div ref={containerRef} className="premium-search relative w-[clamp(15rem,34vw,30rem)] max-w-[56vw]">
+                <form onSubmit={handleSearch} role="search" className="premium-search-field">
+                  <Search aria-hidden="true" className="search-leading-icon" size={18}/>
                   <input
                     autoFocus
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                    placeholder="Buscar filmes, séries..."
+                    aria-label="Buscar títulos" aria-busy={searchLoading} placeholder="Buscar filmes e séries"
                     className="flex-1 min-w-0 bg-transparent text-foreground text-base px-4 py-2.5 focus:outline-none placeholder:text-foreground/55"
                   />
-                  <button type="submit" className="bg-primary text-primary-foreground px-4 py-2.5 hover:bg-primary/85 transition-colors border-l border-primary/40">
-                    <Search className="w-5 h-5" />
+                  <button aria-label="Buscar" type="submit" className="search-submit">
+                    <span aria-hidden="true">↵</span>
                   </button>
                 </form>
 
                 {/* Suggestions Dropdown */}
-                {showSuggestions && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in">
+                {(showSuggestions||searchLoading||(query.trim().length>=2)) && (
+                  <div className="search-results-panel absolute top-full left-0 right-0 z-50">
+                    <div className="search-results-heading"><span>{searchLoading?"BUSCANDO HISTÓRIAS":"ENCONTRAMOS PARA VOCÊ"}</span><kbd>ESC</kbd></div>
+                    {!searchLoading&&!suggestions.length&&<p className="search-empty">Nenhum título encontrado. Tente outro nome.</p>}
                     {suggestions.map((item) => (
                       <button
                         key={item.id}
@@ -154,18 +168,19 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <button onClick={() => setSearchOpen(true)} className="text-foreground/70 hover:text-foreground transition-colors">
+              <button onClick={() => setSearchOpen(true)} aria-label="Abrir busca" className="nav-icon text-foreground/70 hover:text-foreground transition-colors">
                 <Search className="w-5 h-5" />
               </button>
             )}
             {searchOpen && (
-              <button onClick={() => { setSearchOpen(false); setQuery(""); setSuggestions([]); setShowSuggestions(false); }} className="text-foreground/70 hover:text-foreground">
+              <button aria-label="Fechar busca" onClick={() => { setSearchOpen(false); setQuery(""); setSuggestions([]); setShowSuggestions(false); }} className="text-foreground/70 hover:text-foreground">
                 <X className="w-5 h-5" />
               </button>
             )}
+            {profile && <Link to="/profiles" className="nav-profile" aria-label={`Trocar perfil: ${profile.name}`}><ProfileAvatar profile={profile} small/></Link>}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="md:hidden text-foreground/70 hover:text-foreground"
+              aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={mobileOpen} className="nav-icon xl:hidden text-foreground/70 hover:text-foreground"
             >
               {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -175,8 +190,8 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden bg-background/95 backdrop-blur-md border-t border-border animate-fade-in">
-          <div className="px-4 md:px-12 py-4 space-y-1">
+        <div className="xl:hidden bg-background/95 backdrop-blur-md border-t border-border animate-fade-in">
+          <div className="nav-inner py-4 space-y-1">
             {navItems.map((item) => (
               <Link
                 key={item.path}

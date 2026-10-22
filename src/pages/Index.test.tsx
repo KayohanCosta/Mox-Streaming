@@ -1,0 +1,11 @@
+import {MemoryRouter} from "react-router-dom";
+import {cleanup,render,screen} from '@testing-library/react';
+import {afterEach,expect,it,vi} from 'vitest';
+import Index from './Index';
+vi.mock('@/components/Navbar',()=>({default:()=>null}));vi.mock('@/components/SiteFooter',()=>({default:()=>null}));vi.mock('@/components/CollectionTiles',()=>({default:()=>null}));vi.mock('@/components/EditorialShelf',()=>({default:()=>null}));vi.mock('@/components/ContinueWatchingRow',()=>({default:()=>null}));vi.mock('@/components/Top10Row',()=>({default:()=>null}));
+vi.mock('@/components/HeroBanner',()=>({default:({isLoading}:{isLoading:boolean})=><h1>{isLoading?'Carregando destaque':'Destaque disponível'}</h1>}));
+vi.mock('@/components/ContentRow',()=>({default:({title,isLoading}:{title:string;isLoading:boolean})=><p>{isLoading?'Aguardando coleção':title}</p>}));
+vi.mock('@/hooks/useSavedTitles',()=>({useSavedTitles:()=>[],savedAsMedia:vi.fn()}));vi.mock('@/hooks/useWatchProgress',()=>({useWatchProgress:()=>({items:[]})}));
+vi.mock('@/lib/tmdb',()=>({CATEGORIES:{movies:'movies',series:'series',anime:'anime',doramas:'doramas',novelas:'novelas'},fetchTrending:vi.fn(async()=>[]),fetchTop10Brasil:vi.fn(()=>new Promise(()=>{})),fetchCategory:vi.fn(async(key:string)=>{if(key==='anime')throw Error('offline');return{results:[]};})}));
+afterEach(cleanup);
+it('renders the hero and available collections while another collection is pending or fails',async()=>{render(<MemoryRouter><Index/></MemoryRouter>);expect(await screen.findByText('Destaque disponível')).toBeInTheDocument();expect(await screen.findByText('Filmes Populares')).toBeInTheDocument();expect(await screen.findByText(/Algumas coleções não carregaram/)).toBeInTheDocument();});

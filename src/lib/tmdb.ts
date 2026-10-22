@@ -6,6 +6,7 @@ export { TMDB_API_KEY, BASE_URL, IMG_BASE };
 
 export interface MediaItem {
   id: number;
+  original_language?: string;
   title?: string;
   name?: string;
   original_title?: string;
@@ -68,6 +69,7 @@ export interface Season {
 
 export interface Episode {
   id: number;
+  runtime?: number;
   episode_number: number;
   name: string;
   overview: string;
@@ -98,11 +100,18 @@ export function backdropUrl(path: string | null, size = "original"): string {
   return `${IMG_BASE}${size}${path}`;
 }
 
+const metadataCache=new Map<string,{expires:number;promise:Promise<unknown>}>();
 async function tmdbFetch<T>(endpoint: string): Promise<T> {
-  const sep = endpoint.includes("?") ? "&" : "?";
-  const res = await fetch(`${BASE_URL}${endpoint}${sep}api_key=${TMDB_API_KEY}&language=pt-BR`);
-  if (!res.ok) throw new Error(`TMDB error: ${res.status}`);
-  return res.json();
+  const cached=metadataCache.get(endpoint);
+  if(cached&&cached.expires>Date.now())return cached.promise as Promise<T>;
+  const controller=new AbortController();const deadline=setTimeout(()=>controller.abort(),15_000);
+  const sep=endpoint.includes("?")?"&":"?";
+  const promise=fetch(`${BASE_URL}${endpoint}${sep}api_key=${TMDB_API_KEY}&language=pt-BR`,{signal:controller.signal}).then(res=>{if(!res.ok)throw new Error(`TMDB error: ${res.status}`);return res.json() as Promise<T>;}).finally(()=>clearTimeout(deadline));
+  const entry={expires:Date.now()+300_000,promise};
+  if(metadataCache.size>=128)metadataCache.delete(metadataCache.keys().next().value!);
+  metadataCache.set(endpoint,entry);
+  void promise.catch(()=>{if(metadataCache.get(endpoint)===entry)metadataCache.delete(endpoint);});
+  return promise;
 }
 
 export async function fetchTrending(): Promise<MediaItem[]> {
@@ -197,6 +206,6 @@ export const CATEGORIES = {
   movies: "movie/popular?sort_by=popularity.desc&vote_count.gte=1000",
   series: "tv/top_rated?sort_by=popularity.desc&vote_count.gte=1000",
   anime: "discover/tv?sort_by=popularity.desc&with_genres=16&with_keywords=210024|222243&vote_count.gte=100",
-  doramas: "discover/tv?sort_by=popularity.desc&with_original_language=ko|ja|zh&without_genres=16&vote_count.gte=50",
-  novelas: "discover/tv?sort_by=popularity.desc&with_origin_country=BR&with_genres=18&without_keywords=210024|222243&vote_count.gte=20",
+  doramas: "discover/tv?sort_by=popularity.desc&with_original_language=ko|ja|zh&with_genres=18&without_genres=16&vote_count.gte=50",
+  novelas: "discover/tv?sort_by=popularity.desc&with_origin_country=BR&with_genres=10766&without_keywords=210024|222243&vote_count.gte=20",
 } as const;
