@@ -7,3 +7,7 @@ verify_jwt = false
 # Fixed-scope worker with a database lease and global rate limit.
 [functions.mox-catalog-sync]
 verify_jwt = false
+
+# Experimental only; not connected to the production player.
+[functions.mox-http-resolver]
+verify_jwt = true
