@@ -33,6 +33,13 @@ describe("RedeCanais integration", () => {
    await expect(resolveMovieStream(969681,"en")).rejects.toThrow();
   }
  });
+ it("accepts only the matching cloud range relay path",async()=>{
+  const response=(media_url:string)=>({ok:true,json:async()=>({status:"ready",delivery_mode:"cloud_range_relay",stream_preflight_validated:true,tmdb_id:969681,language:"pt",media_url})});
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue(response("/stream/movie/969681")));
+  await expect(resolveMovieStream(969681,"pt")).resolves.toBe("/redecanais/stream/movie/969681");
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue(response("/stream/movie/1")));
+  await expect(resolveMovieStream(969681,"pt")).rejects.toThrow();
+ });
  it("reports the origin's missing-language error",async()=>{
   vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,json:async()=>({error:{message:"Versão indisponível"}})}));
   await expect(resolveMovieStream(969681,"en")).rejects.toThrow("Versão indisponível");
