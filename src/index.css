@@ -678,3 +678,9 @@ html[data-input="remote"] :is(a,button,[role="button"],[role="link"]):focus{outl
 .media-unavailable-overlay.is-checking{background:rgba(2,2,5,.08);backdrop-filter:blur(.5px);-webkit-backdrop-filter:blur(.5px)}
 .hero-backdrop-upcoming{filter:blur(2px) brightness(.88)}
 .hero-availability{display:inline-flex;align-items:center;width:max-content;margin-bottom:12px;padding:7px 12px;border:1px solid #ffffff60;border-radius:999px;background:#09080bc9;color:#f4edf8;font-size:11px;font-weight:800;letter-spacing:.075em;text-transform:uppercase}
+/* Quiet native select styling for the catalogue year filter. */
+.browse-year select{appearance:none;-webkit-appearance:none;min-height:44px;padding:11px 38px 11px 15px;border:1px solid #ffffff20;border-radius:10px;background:linear-gradient(180deg,#1d1922,#151219);box-shadow:inset 0 1px #ffffff08;color:#f0eaf3;outline:0;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.browse-year select:hover{border-color:#b998cd66}
+.browse-year select:focus-visible{border-color:#b78cd4;box-shadow:0 0 0 3px #a466d01f}
+.browse-year{position:relative}.browse-year::after{content:"⌄";position:absolute;right:15px;bottom:11px;color:#b8a8c4;font-size:18px;line-height:20px;pointer-events:none}
+.browse-year select option{color:#fff;background:#211b28}

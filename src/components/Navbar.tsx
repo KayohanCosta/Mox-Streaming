@@ -13,7 +13,7 @@ const navItems = [
   { label: "Doramas", path: "/category/doramas", icon: Tv },
   { label: "Novelas", path: "/category/novelas", icon: Tv },
   { label: "TV", path: "/tv", icon: Tv },
-  ...(import.meta.env.DEV&&import.meta.env.VITE_ADDON_LOCAL_TEST==="1"?[{label:"Acervo",path:"/acervo",icon:Film}]:[]),
+  {label:"Acervo",path:"/acervo",icon:Film},
   { label: "Minha lista", path: "/my-list", icon: Bookmark },
 ];
 
