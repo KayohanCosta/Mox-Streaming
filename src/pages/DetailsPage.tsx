@@ -218,6 +218,9 @@ export default function DetailsPage() {
     const seasons=(details?.seasons || []).filter(s=>s.season_number>0&&s.season_number<seasonNum);
     // Refuse an offset if TMDB omitted a preceding season.
     if (seasons.length !== seasonNum-1) return undefined;
+    const current=details?.seasons?.find(s=>s.season_number===seasonNum);
+    // Some TMDB series number episodes continuously across seasons.
+    if (seasonNum>1 && current && episodeNum>current.episode_count) return episodeNum;
     return seasons.reduce((total,s)=>total+s.episode_count,0)+episodeNum;
   },[details]);
   const openPlayer = useCallback((seasonNum?: number, episodeNum?: number, resume = true) => {
