@@ -1,6 +1,8 @@
 export interface IPTVStream {
   title: string;
   category?: string;
+  logo?: string;
+  locationHint?: string;
   tmdbId?: string;
   type: "movie" | "tv";
   season?: number;
@@ -97,8 +99,10 @@ export function parseM3U(m3u: string): IPTVStream[] {
       const rawTitle = info ? info[1].trim() : "";
       const tvgNameMatch = line.match(/tvg-name="([^"]+)"/i);
       const tvgIdMatch = line.match(/tvg-id="([^"]+)"/i);
+      const locationMatch = line.match(/(?:tvg-country|tvg-region|tvg-city)="([^"]+)"/i);
       const title = (tvgNameMatch ? tvgNameMatch[1] : rawTitle).trim();
       current = { title: cleanupTitle(title) };
+      if (locationMatch) current.locationHint = locationMatch[1].trim();
 
       const tmdbMatch = (tvgIdMatch?.[1] || rawTitle).match(/TMDB:(\d+)/i);
       if (tmdbMatch) current.tmdbId = tmdbMatch[1];
@@ -107,10 +111,15 @@ export function parseM3U(m3u: string): IPTVStream[] {
       }
 
       const groupMatch = line.match(/group-title="([^"]+)"/i);
+      const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
+      if (logoMatch && /^https?:\/\//i.test(logoMatch[1])) current.logo = logoMatch[1];
       if (groupMatch) {
         current.category = groupMatch[1].trim();
         const group = current.category.toLowerCase();
         current.type = group.includes("serie") || group.includes("series") || group.includes("tv") ? "tv" : "movie";
+      }
+      if (tvgIdMatch && /fortaleza|local|regional/i.test(tvgIdMatch[1])) {
+        current.locationHint = [current.locationHint, tvgIdMatch[1]].filter(Boolean).join(" ");
       }
 
       const seasonEpMatch = rawTitle.match(/T(\d+)E(\d+)/i)
@@ -135,6 +144,16 @@ export function parseM3U(m3u: string): IPTVStream[] {
   }
 
   return streams;
+}
+
+export function filterLocalChannelsForFortaleza(streams: IPTVStream[]): IPTVStream[] {
+  const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return streams.filter((stream) => {
+    const description = normalize([stream.title, stream.category, stream.locationHint].filter(Boolean).join(" "));
+    const markedLocal = /\b(locais?|regionais?|cidades?)\b/.test(description);
+    if (!markedLocal) return true;
+    return /\bfortaleza\b/.test(description);
+  });
 }
 
 function cleanupTitle(title: string): string {

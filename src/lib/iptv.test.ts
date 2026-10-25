@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   clearIPTVPlaylist,
   fetchIPTVList,
+  filterLocalChannelsForFortaleza,
   getIPTVPlaylistConfig,
   parseM3U,
   saveIPTVPlaylist,
@@ -15,7 +16,7 @@ describe("IPTV playlist", () => {
   it("parses M3U channels and their categories", () => {
     const streams = parseM3U([
       "#EXTM3U",
-      '#EXTINF:-1 tvg-id="42" group-title="Canais",Canal de notícias',
+      '#EXTINF:-1 tvg-id="42" tvg-logo="https://example.com/logo.png" group-title="Canais",Canal de notícias',
       "https://example.com/news.m3u8",
       '#EXTINF:-1 group-title="Séries",Minha Série S02E03 (2024)',
       "https://example.com/series.mkv",
@@ -25,6 +26,7 @@ describe("IPTV playlist", () => {
       {
         title: "Canal de notícias",
         category: "Canais",
+        logo: "https://example.com/logo.png",
         tmdbId: "42",
         type: "movie",
         url: "https://example.com/news.m3u8",
@@ -56,5 +58,21 @@ describe("IPTV playlist", () => {
     await expect(saveIPTVPlaylist({ source: "content", value: "#EXTM3U\n" }))
       .rejects.toThrow("Nenhum canal ou conteúdo foi encontrado");
     expect(getIPTVPlaylistConfig()).toBeNull();
+  });
+
+  it("keeps general channels and only explicitly Fortaleza local channels", () => {
+    const streams = parseM3U([
+      "#EXTM3U",
+      '#EXTINF:-1 group-title="Notícias",Canal nacional',
+      'https://example.com/nacional.m3u8',
+      '#EXTINF:-1 group-title="Canais Locais" tvg-city="Fortaleza",Canal da cidade',
+      'https://example.com/fortaleza.m3u8',
+      '#EXTINF:-1 group-title="Canais Locais" tvg-city="Recife",Canal do Recife',
+      'https://example.com/recife.m3u8',
+      '#EXTINF:-1 group-title="Canais Locais",Canal sem cidade',
+      'https://example.com/desconhecido.m3u8',
+    ].join("\n"));
+    expect(filterLocalChannelsForFortaleza(streams).map((stream) => stream.title))
+      .toEqual(["Canal nacional", "Canal da cidade"]);
   });
 });

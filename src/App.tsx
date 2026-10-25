@@ -14,6 +14,8 @@ import Index from "./pages/Index";
 const SearchPage=lazy(()=>import("./pages/SearchPage"));
 const DetailsPage=lazy(()=>import("./pages/DetailsPage"));
 const CategoryPage=lazy(()=>import("./pages/CategoryPage"));
+const TVPage=lazy(()=>import("./pages/TVPage"));
+const AddonCatalogPage=lazy(()=>import("./pages/AddonCatalogPage"));
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +35,8 @@ const App = () => (
           <Route path="/search" element={<SearchPage />} />
           <Route path="/details/:type/:id" element={<DetailsPage />} />
           <Route path="/category/:category" element={<CategoryPage />} />
+          <Route path="/tv" element={<TVPage />} />
+          {import.meta.env.DEV&&import.meta.env.VITE_ADDON_LOCAL_TEST==="1"&&<Route path="/acervo" element={<AddonCatalogPage/>}/>}
           <Route path="*" element={<NotFound />} />
         </Routes></Suspense></ProfileGate>
       </BrowserRouter>

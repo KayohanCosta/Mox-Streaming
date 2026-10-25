@@ -1,8 +1,9 @@
 export const CONTENT_UNAVAILABLE_MESSAGE = "Indisponivel no momento Aguarde novas Atualizações de Catalogo";
 const unavailableCodes = new Set(["tmdb_not_mapped", "series_not_found", "episodes_not_found", "episode_unavailable", "language_unavailable", "item_not_found", "ambiguous_episode", "ambiguous_series", "series_list_required"]);
+const temporaryOriginMessage = "O serviço de vídeos está temporariamente indisponível. Tente novamente mais tarde.";
 export class PlaybackAPIError extends Error {
   constructor(public code: string, public status: number, message: string) {
-    super(unavailableCodes.has(code) ? CONTENT_UNAVAILABLE_MESSAGE : message);
+    super(code === "catalog_unavailable" ? temporaryOriginMessage : unavailableCodes.has(code) ? CONTENT_UNAVAILABLE_MESSAGE : message);
     this.name = "PlaybackAPIError";
   }
 }
