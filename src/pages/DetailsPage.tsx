@@ -12,6 +12,7 @@ import { Star, Clock, Calendar, Play, X, Youtube, ChevronDown, Loader2 } from "l
 import IPTVPlayer from "@/components/IPTVPlayer";
 import { saveWatchProgress, getWatchProgress, removeWatchProgress, useWatchProgress } from "@/hooks/useWatchProgress";
 import { CONTENT_UNAVAILABLE_MESSAGE, fetchMovieSources, resolveMovieStream, fetchSeriesSources, resolveEpisodeStream, prepareEpisodeStream, prepareMovieStream, type SeriesSources, type MovieLanguage, type MovieLanguageOption } from "@/lib/redecanais";
+import { refreshTitleAvailability, useTitleAvailability } from "@/lib/titleAvailability";
 
 type PlayerSource = "iptv-1" | "iptv-2" | "iptv-3";
 type PlayerTab = "iptv-1" | "iptv-2" | "iptv-3";
@@ -30,6 +31,7 @@ const localAddonTest = import.meta.env.DEV && import.meta.env.VITE_ADDON_LOCAL_T
 
 export default function DetailsPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
+  const availability=useTitleAvailability(type,Number(id),Boolean(type&&id));
   const [localAddonMovie,setLocalAddonMovie] = useState(false);
   const [localAddonTV,setLocalAddonTV] = useState(false);
   const [localProbeResolvedKey,setLocalProbeResolvedKey] = useState<string|null>(null);
@@ -224,7 +226,7 @@ export default function DetailsPage() {
     return seasons.reduce((total,s)=>total+s.episode_count,0)+episodeNum;
   },[details]);
   const openPlayer = useCallback((seasonNum?: number, episodeNum?: number, resume = true) => {
-    if (!details) return;
+    if (!details || availability!=="available") return;
     transitionRef.current+=1;
     setStartedKey("");
     const mediaType=type === "movie" ? "movie" : "tv";
@@ -236,7 +238,7 @@ export default function DetailsPage() {
     const language=available?.length && !available.some(e=>e.language===requestedLanguage) ? defaultLanguage : requestedLanguage;
     playbackLanguageRef.current=language;
     setPlayer({open:true,tab:"iptv-1",source:"iptv-1",seasonNum,episodeNum,initialTime:previous?.completed?0:previous?.currentTime || 0,language});
-  },[details,id,type,seriesSources,absoluteEpisode]);
+  },[details,id,type,seriesSources,absoluteEpisode,availability]);
   useEffect(()=>{
     if(!searchParams.has("resume")||!details||details.id!==Number(id))return;
     const key=`${type}:${id}`;if(resumeRequest.current===key)return;
@@ -478,8 +480,9 @@ export default function DetailsPage() {
 
             <div className="flex flex-wrap gap-4 z-30 relative items-center mt-6">
               {addonTVUnavailable && <span role="status" className="rounded-full border border-white/20 bg-black/45 px-5 py-3 text-sm text-white/80">Indisponível no momento. Aguarde novas atualizações do catálogo.</span>}
+              {!addonTVUnavailable && availability!=="available" && <div className="flex flex-wrap items-center gap-3"><span role="status" className="rounded-full border border-white/25 bg-black/55 px-5 py-3 text-sm font-semibold text-white">{availability==="checking"?"Verificando disponibilidade…":"Em Breve na MOX"}</span>{availability==="upcoming"&&<button type="button" onClick={()=>refreshTitleAvailability(type!,Number(id))} className="rounded-full border border-white/25 px-4 py-2 text-sm text-white/80 hover:border-primary">Verificar novamente</button>}</div>}
               {/* Botão Assistir ou Continuar Assistindo (primeiro à esquerda) */}
-              {!addonTVUnavailable && (() => {
+              {!addonTVUnavailable && availability==="available" && (() => {
                 const progress = savedProgress;
                 if (progress && !progress.completed && progress.progress < 100) {
                   return (
@@ -669,6 +672,7 @@ export default function DetailsPage() {
                     alt={ep.name}
                     className="w-full h-full object-cover"
                   />
+                  {availability!=="available" && <span className={`media-unavailable-overlay${availability==="checking"?" is-checking":""}`}><span>{availability==="checking"?"Verificando":"Em Breve na MOX"}</span></span>}
                   <div className="absolute inset-0 flex items-center justify-center bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Play className="w-10 h-10 text-primary fill-current" />
                   </div>

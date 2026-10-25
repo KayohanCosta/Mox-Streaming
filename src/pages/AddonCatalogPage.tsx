@@ -36,7 +36,7 @@ function CatalogShelf({ category, label, search }: {category: Category; label: s
   return <HorizontalShelf title={label} eyebrow={`${total.toLocaleString("pt-BR")} títulos`} className="acervo-shelf">
     {items.map(item => <article className="media-card group" key={`${item.category}:${item.tmdb_id}`}>
       <Link to={`/details/${item.type}/${item.tmdb_id}`} aria-label={`Ver ${item.title}`}>
-        <div className="media-card-art">{item.poster ? <img src={item.poster} alt={item.title} loading="lazy" /> : <div className="flex h-full items-center justify-center bg-gradient-to-br from-violet-950 to-black p-4 text-center font-semibold">{item.title}</div>}<div className="media-card-shade" />{!item.source_candidate && <span className="media-unavailable-overlay"><span>Indisponível</span></span>}</div>
+        <div className="media-card-art">{item.poster ? <img src={item.poster} alt={item.title} loading="lazy" /> : <div className="flex h-full items-center justify-center bg-gradient-to-br from-violet-950 to-black p-4 text-center font-semibold">{item.title}</div>}<div className="media-card-shade" />{!item.source_candidate && <span className="media-unavailable-overlay"><span>Em Breve na MOX</span></span>}</div>
         <h3>{item.title}</h3><p>{label}</p>
       </Link>
     </article>)}

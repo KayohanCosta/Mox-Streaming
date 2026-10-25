@@ -673,5 +673,8 @@ html[data-input="remote"] :is(a,button,[role="button"],[role="link"]):focus{outl
 /* Keep horizontal navigation by arrows, touch gestures, trackpad and keyboard, without a visible scrollbar. */
 .mox-shelf-track{scrollbar-width:none}
 .mox-shelf-track::-webkit-scrollbar{display:none}
-.media-unavailable-overlay{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(2,2,5,.28);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:#f4edf8;text-align:center;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.media-unavailable-overlay>span{padding:9px 12px;border:1px solid #ffffff60;border-radius:5px;background:#09080bd9;box-shadow:0 4px 18px #0008}
+.media-unavailable-overlay{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:rgba(2,2,5,.17);backdrop-filter:blur(1.4px);-webkit-backdrop-filter:blur(1.4px);color:#f4edf8;text-align:center;font-size:11px;font-weight:800;letter-spacing:.075em;text-transform:uppercase;pointer-events:none}
+.media-unavailable-overlay>span{padding:9px 12px;border:1px solid #ffffff60;border-radius:7px;background:#09080bc9;box-shadow:0 4px 18px #0006}
+.media-unavailable-overlay.is-checking{background:rgba(2,2,5,.08);backdrop-filter:blur(.5px);-webkit-backdrop-filter:blur(.5px)}
+.hero-backdrop-upcoming{filter:blur(2px) brightness(.88)}
+.hero-availability{display:inline-flex;align-items:center;width:max-content;margin-bottom:12px;padding:7px 12px;border:1px solid #ffffff60;border-radius:999px;background:#09080bc9;color:#f4edf8;font-size:11px;font-weight:800;letter-spacing:.075em;text-transform:uppercase}
