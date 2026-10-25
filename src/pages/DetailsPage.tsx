@@ -13,6 +13,7 @@ import IPTVPlayer from "@/components/IPTVPlayer";
 import { saveWatchProgress, getWatchProgress, removeWatchProgress, useWatchProgress } from "@/hooks/useWatchProgress";
 import { CONTENT_UNAVAILABLE_MESSAGE, fetchMovieSources, resolveMovieStream, fetchSeriesSources, resolveEpisodeStream, prepareEpisodeStream, prepareMovieStream, type SeriesSources, type MovieLanguage, type MovieLanguageOption } from "@/lib/redecanais";
 import { refreshTitleAvailability, useTitleAvailability } from "@/lib/titleAvailability";
+import AvailableEpisodeCard from "@/components/AvailableEpisodeCard";
 
 type PlayerSource = "iptv-1" | "iptv-2" | "iptv-3";
 type PlayerTab = "iptv-1" | "iptv-2" | "iptv-3";
@@ -660,33 +661,7 @@ export default function DetailsPage() {
 
           {/* Episódios em Row Horizontal */}
           <div className="detail-episode-grid">
-            {episodes.map((ep) => (
-              <div
-                key={ep.id}
-                onClick={() => openPlayer(selectedSeason, ep.episode_number)}
-                role="button" tabIndex={0} onKeyDown={e=>{if(e.key==="Enter")openPlayer(selectedSeason,ep.episode_number);}} className="detail-episode-card group"
-              >
-                <div className="aspect-video relative bg-secondary">
-                  <img
-                    src={ep.still_path ? posterUrl(ep.still_path, "w500") : "/placeholder.svg"}
-                    alt={ep.name}
-                    className="w-full h-full object-cover"
-                  />
-                  {availability!=="available" && <span className={`media-unavailable-overlay${availability==="checking"?" is-checking":""}`}><span>{availability==="checking"?"Verificando":"Em Breve na MOX"}</span></span>}
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Play className="w-10 h-10 text-primary fill-current" />
-                  </div>
-                </div>
-                <div className="p-4">
-                  <h4 className="text-base font-bold truncate">
-                    E{ep.episode_number} - {ep.name}
-                  </h4>
-                  {ep.overview && (
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{ep.overview}</p>
-                  )}
-                </div>
-              </div>
-            ))}
+            {episodes.map((ep) => <AvailableEpisodeCard key={ep.id} episode={ep} titleId={Number(id)} season={selectedSeason} titleStatus={availability} onPlay={openPlayer} />)}
           </div>
         </div>
       )}

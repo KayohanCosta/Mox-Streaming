@@ -41,12 +41,18 @@ function pump() {
   while (active < 3 && waiting.length) {
     const key = waiting.shift()!;
     active++;
-    const [type, id] = key.split(":");
-    void fetch(`${API}/v1/availability/${type}/${id}`, { cache: "no-store" })
+    const [type, id, season, episode] = key.split(":");
+    const episodePath = type === "episode";
+    const url = episodePath
+      ? `${API}/v1/availability/tv/${id}/season/${season}/episode/${episode}`
+      : `${API}/v1/availability/${type}/${id}`;
+    void fetch(url, { cache: "no-store" })
       .then(async response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        if (data.tmdb_id !== Number(id) || data.type !== type || !["available", "upcoming"].includes(data.status)) throw new Error("Resposta inválida");
+        if (data.tmdb_id !== Number(id) || data.type !== (episodePath ? "tv" : type) ||
+            (episodePath && (data.season !== Number(season) || data.episode !== Number(episode))) ||
+            !["available", "upcoming"].includes(data.status)) throw new Error("Resposta inválida");
         const status = data.status as ResolvedAvailability;
         entries.set(key, { status, expires: Date.now() + (status === "available" ? 15 : 5) * 60_000 });
         publish(key, status);
@@ -74,6 +80,21 @@ export function refreshTitleAvailability(type: string, id: number) {
 
 export function useTitleAvailability(type: string | undefined, id: number | undefined, enabled = true): TitleAvailability {
   const key = keyFor(type, id);
+  const [status, setStatus] = useState<TitleAvailability>(() => read(key));
+  useEffect(() => {
+    setStatus(read(key));
+    if (!key) return;
+    let group = listeners.get(key);
+    if (!group) { group = new Set(); listeners.set(key, group); }
+    group.add(setStatus);
+    if (enabled) ensure(key);
+    return () => { group!.delete(setStatus); if (!group!.size) listeners.delete(key); };
+  }, [key, enabled]);
+  return status;
+}
+
+export function useEpisodeAvailability(id: number, season: number, episode: number, enabled = true): TitleAvailability {
+  const key = Number.isSafeInteger(id) && id > 0 && season > 0 && episode > 0 ? `episode:${id}:${season}:${episode}` : "";
   const [status, setStatus] = useState<TitleAvailability>(() => read(key));
   useEffect(() => {
     setStatus(read(key));
