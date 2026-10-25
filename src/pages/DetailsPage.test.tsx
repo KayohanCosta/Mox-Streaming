@@ -61,3 +61,11 @@ it('opens Continue Watching directly at the saved episode and second',async()=>{
  await waitFor(()=>expect(container.querySelector('video')?.getAttribute('src')).toBe('/s1e2.mp4'));
  const video=container.querySelector('video')!;Object.defineProperty(video,'duration',{value:1000,configurable:true});fireEvent.loadedMetadata(video);expect(video.currentTime).toBe(321);
 });
+it('keeps direct episode playback available when catalog lookup fails',async()=>{
+ const api=await import('@/lib/redecanais');
+ vi.mocked(api.fetchSeriesSources).mockRejectedValueOnce(new Error('Catálogo temporariamente indisponível'));
+ const {container}=render(<MemoryRouter initialEntries={['/details/tv/84958']}><Routes><Route path="/details/:type/:id" element={<DetailsPage/>}/></Routes></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'Assistir'}));
+ await waitFor(()=>expect(container.querySelector('video')?.getAttribute('src')).toBe('/s1e1.mp4'));
+ expect(screen.queryByText('Catálogo temporariamente indisponível')).not.toBeInTheDocument();
+});

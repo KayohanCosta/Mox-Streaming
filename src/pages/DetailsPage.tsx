@@ -8,10 +8,12 @@ import SaveTitleButton from "@/components/SaveTitleButton";
 import ContentRow from "@/components/ContentRow";
 import SiteFooter from "@/components/SiteFooter";
 import Navbar from "@/components/Navbar";
-import { Star, Clock, Calendar, Play, X, Youtube, ChevronDown } from "lucide-react";
+import { Star, Clock, Calendar, Play, X, Youtube, ChevronDown, Loader2 } from "lucide-react";
 import IPTVPlayer from "@/components/IPTVPlayer";
 import { saveWatchProgress, getWatchProgress, removeWatchProgress, useWatchProgress } from "@/hooks/useWatchProgress";
-import { fetchMovieSources, resolveMovieStream, fetchSeriesSources, resolveEpisodeStream, prepareEpisodeStream, prepareMovieStream, type SeriesSources, type MovieLanguage, type MovieLanguageOption } from "@/lib/redecanais";
+import { CONTENT_UNAVAILABLE_MESSAGE, fetchMovieSources, resolveMovieStream, fetchSeriesSources, resolveEpisodeStream, prepareEpisodeStream, prepareMovieStream, type SeriesSources, type MovieLanguage, type MovieLanguageOption } from "@/lib/redecanais";
+import { refreshTitleAvailability, useTitleAvailability } from "@/lib/titleAvailability";
+import AvailableEpisodeCard from "@/components/AvailableEpisodeCard";
 
 type PlayerSource = "iptv-1" | "iptv-2" | "iptv-3";
 type PlayerTab = "iptv-1" | "iptv-2" | "iptv-3";
@@ -26,8 +28,15 @@ interface PlayerState {
   language?: MovieLanguage;
 }
 
+const localAddonTest = import.meta.env.DEV && import.meta.env.VITE_ADDON_LOCAL_TEST === "1";
+
 export default function DetailsPage() {
   const { type, id } = useParams<{ type: string; id: string }>();
+  const availability=useTitleAvailability(type,Number(id),Boolean(type&&id));
+  const [localAddonMovie,setLocalAddonMovie] = useState(false);
+  const [localAddonTV,setLocalAddonTV] = useState(false);
+  const [localProbeResolvedKey,setLocalProbeResolvedKey] = useState<string|null>(null);
+  const [seriesLookupResolvedKey,setSeriesLookupResolvedKey] = useState<string|null>(null);
   const [searchParams]=useSearchParams();
   const resumeRequest=useRef("");
   const [detailTab,setDetailTab]=useState<"episodes"|"about"|"similar">("episodes");
@@ -47,6 +56,8 @@ export default function DetailsPage() {
   const [showSeasonDropdown, setShowSeasonDropdown] = useState(false);
   const { items: progressItems } = useWatchProgress();
   const [seriesSources, setSeriesSources] = useState<SeriesSources | null>(null);
+  const [seriesLookupError,setSeriesLookupError] = useState<string|null>(null);
+  const [sourceRetry,setSourceRetry] = useState(0);
   const [episodeListLoading,setEpisodeListLoading]=useState(false);
   const seasonRequests=useRef(new Map<string,Promise<Episode[]>>());
   const seasonListRequest=useRef(0);
@@ -78,14 +89,45 @@ export default function DetailsPage() {
   const [audioOptions, setAudioOptions] = useState<MovieLanguageOption[] | undefined>();
 
   useEffect(() => {
+    setLocalAddonMovie(false);
+    if (!localAddonTest || type !== "movie" || !id) return;
+    const controller = new AbortController();
+    void fetch(`/addon-local/catalog/movie/${id}`, {signal:controller.signal})
+      .then(response=>response.ok?response.json():null)
+      .then(data=>{
+        if(controller.signal.aborted||!data?.available)return;
+        setLocalAddonMovie(true);
+        void fetch(`/addon-local/resolve/movie/${id}`, {signal:controller.signal}).catch(()=>{});
+      }).catch(()=>{}).finally(()=>{if(!controller.signal.aborted)setLocalProbeResolvedKey(`${type}:${id}`);});
+    return () => controller.abort();
+  }, [id,type]);
+
+  useEffect(() => {
+    setLocalAddonTV(false);
+    if (!localAddonTest || type !== "tv" || !id || !details || details.id !== Number(id)) return;
+    const controller = new AbortController();
+    const params=new URLSearchParams({title:getTitle(details),original_title:details.original_name||"",year:getYear(details)});
+    void fetch(`/addon-local/catalog/tv/${id}?${params}`, {signal:controller.signal})
+      .then(response=>response.ok?response.json():null)
+      .then(data=>{if(!controller.signal.aborted&&data?.available)setLocalAddonTV(true);})
+      .catch(()=>{})
+      .finally(()=>{if(!controller.signal.aborted)setLocalProbeResolvedKey(`${type}:${id}`);});
+    return () => controller.abort();
+  }, [id,type,details,sourceRetry]);
+
+  useEffect(() => {
     setAudioOptions(undefined);
     if (type !== "movie" || !id) return;
+    if (localAddonMovie) {
+      setAudioOptions([{id:"pt",available:true,label:"Português (Dublado)",version:"dublado",audio_language:"pt"}]);
+      return;
+    }
     const controller = new AbortController();
     fetchMovieSources(Number(id), controller.signal)
       .then((data) => { if (!controller.signal.aborted) setAudioOptions(data.languages); })
       .catch(() => { /* Playback reports the precise source error on demand. */ });
     return () => controller.abort();
-  }, [id, type]);
+  }, [id, type, localAddonMovie]);
 
   useEffect(() => {
     if (!id || !type) return;
@@ -123,13 +165,31 @@ export default function DetailsPage() {
 
   useEffect(() => {
     setSeriesSources(null);
+    setSeriesLookupError(null);
     if (type !== "tv" || !details || details.id !== Number(id)) return;
+    if (localAddonTest && localProbeResolvedKey !== `${type}:${id}`) return;
+    if (localAddonTest && !localAddonTV) return;
     const controller = new AbortController();
+    const lookupKey=`${id}:${localAddonTV ? "addon" : "legacy"}`;
+    if (localAddonTV) {
+      void fetch(`/addon-local/episodes/tv/${id}`, {signal:controller.signal})
+        .then(response=>{if(!response.ok)throw new Error("Episódios indisponíveis.");return response.json();})
+        .then(data=>{if(!controller.signal.aborted)setSeriesSources(data as SeriesSources);})
+        .catch(()=>{if(!controller.signal.aborted)setSeriesLookupError(CONTENT_UNAVAILABLE_MESSAGE);})
+        .finally(()=>{if(!controller.signal.aborted)setSeriesLookupResolvedKey(lookupKey);});
+      return ()=>controller.abort();
+    }
     fetchSeriesSources(Number(id), {title:getTitle(details),original_title:details.original_name,year:getYear(details)}, controller.signal)
       .then(data=>{if (!controller.signal.aborted) setSeriesSources(data);})
-      .catch(()=>{ /* Resolve reports source errors when playback is requested. */ });
+      .catch(()=>{ /* A lista pode falhar enquanto a resolução direta ainda funciona. */ })
+      .finally(()=>{if(!controller.signal.aborted)setSeriesLookupResolvedKey(lookupKey);});
     return ()=>controller.abort();
-  }, [id,type,details]);
+  }, [id,type,details,localAddonTV,localProbeResolvedKey,sourceRetry]);
+  useEffect(() => {
+    if (localAddonTest && type === "tv" && localProbeResolvedKey === `${type}:${id}` && !localAddonTV) {
+      setPlayer(current => current.open ? {...current, open:false} : current);
+    }
+  }, [id,type,localProbeResolvedKey,localAddonTV]);
   useEffect(()=>()=>{transitionRef.current+=1;},[id,type]);
 
   useEffect(() => {
@@ -161,10 +221,13 @@ export default function DetailsPage() {
     const seasons=(details?.seasons || []).filter(s=>s.season_number>0&&s.season_number<seasonNum);
     // Refuse an offset if TMDB omitted a preceding season.
     if (seasons.length !== seasonNum-1) return undefined;
+    const current=details?.seasons?.find(s=>s.season_number===seasonNum);
+    // Some TMDB series number episodes continuously across seasons.
+    if (seasonNum>1 && current && episodeNum>current.episode_count) return episodeNum;
     return seasons.reduce((total,s)=>total+s.episode_count,0)+episodeNum;
   },[details]);
   const openPlayer = useCallback((seasonNum?: number, episodeNum?: number, resume = true) => {
-    if (!details) return;
+    if (!details || availability!=="available") return;
     transitionRef.current+=1;
     setStartedKey("");
     const mediaType=type === "movie" ? "movie" : "tv";
@@ -172,10 +235,11 @@ export default function DetailsPage() {
     const index=absoluteEpisode(seasonNum || 1,episodeNum || 1);
     const available=seriesSources?.episodes.filter(e=>(e.season===seasonNum&&e.episode===episodeNum)||(e.season===null&&e.episode===index));
     const defaultLanguage=available?.length&&!available.some(e=>e.language==="pt") ? "en" : "pt";
-    const language=previous?.language || (resume ? defaultLanguage : playbackLanguageRef.current);
+    const requestedLanguage=previous?.language || (resume ? defaultLanguage : playbackLanguageRef.current);
+    const language=available?.length && !available.some(e=>e.language===requestedLanguage) ? defaultLanguage : requestedLanguage;
     playbackLanguageRef.current=language;
     setPlayer({open:true,tab:"iptv-1",source:"iptv-1",seasonNum,episodeNum,initialTime:previous?.completed?0:previous?.currentTime || 0,language});
-  },[details,id,type,seriesSources,absoluteEpisode]);
+  },[details,id,type,seriesSources,absoluteEpisode,availability]);
   useEffect(()=>{
     if(!searchParams.has("resume")||!details||details.id!==Number(id))return;
     const key=`${type}:${id}`;if(resumeRequest.current===key)return;
@@ -188,17 +252,30 @@ export default function DetailsPage() {
   },[]);
   const getPlayerUrl = useCallback(
     async (_source: string, seasonNum?: number, episodeNum?: number, language: MovieLanguage = "pt", signal?: AbortSignal): Promise<string> => {
+      if (localAddonMovie) {
+        if (language !== "pt") throw new Error("Esta versão de teste está disponível apenas em português.");
+        return `/addon-local/stream/movie/${id}`;
+      }
+      if (localAddonTV) {
+        if(seasonNum===undefined||episodeNum===undefined)throw new Error("Selecione um episódio.");
+        if(!seriesSources?.episodes.some(item=>item.season===seasonNum&&item.episode===episodeNum&&item.language===language))throw new Error(CONTENT_UNAVAILABLE_MESSAGE);
+        return `/addon-local/stream/tv/${id}/${seasonNum}/${episodeNum}`;
+      }
+      if (localAddonTest && type === "tv") throw new Error(CONTENT_UNAVAILABLE_MESSAGE);
       if (type === "movie") return resolveMovieStream(Number(id),language,signal);
       if (!details || seasonNum === undefined || episodeNum === undefined) throw new Error("Selecione uma temporada e um episódio.");
       return resolveEpisodeStream(Number(id),seasonNum,episodeNum,language,
         {title:getTitle(details),original_title:details.original_name,year:getYear(details)},absoluteEpisode(seasonNum,episodeNum),signal);
-    },[id,type,details,absoluteEpisode]
+    },[id,type,details,absoluteEpisode,localAddonMovie,localAddonTV,seriesSources]
   );
   const prepareLanguage=useCallback((language:MovieLanguage,signal?:AbortSignal)=>{
+    if(localAddonMovie)return language==="pt"?Promise.resolve(`/addon-local/stream/movie/${id}`):Promise.reject(new Error("Idioma indisponível."));
+    if(localAddonTV)return player.seasonNum&&player.episodeNum&&seriesSources?.episodes.some(item=>item.season===player.seasonNum&&item.episode===player.episodeNum&&item.language===language)?Promise.resolve(`/addon-local/stream/tv/${id}/${player.seasonNum}/${player.episodeNum}`):Promise.reject(new Error("Idioma indisponível."));
+    if(localAddonTest&&type==="tv")return Promise.reject(new Error(CONTENT_UNAVAILABLE_MESSAGE));
     if(type==="movie")return prepareMovieStream(Number(id),language,signal);
     if(!details||player.seasonNum===undefined||player.episodeNum===undefined)return Promise.reject(new Error("Selecione um episódio."));
     return prepareEpisodeStream(Number(id),player.seasonNum,player.episodeNum,language,{title:getTitle(details),original_title:details.original_name,year:getYear(details)},absoluteEpisode(player.seasonNum,player.episodeNum),signal);
-  },[id,type,details,player.seasonNum,player.episodeNum,absoluteEpisode]);
+  },[id,type,details,player.seasonNum,player.episodeNum,absoluteEpisode,localAddonMovie,localAddonTV,seriesSources]);
   const recordProgress = useCallback((position: {currentTime:number;duration:number;language:MovieLanguage;completed:boolean}) => {
     if (!details) return;
     playbackLanguageRef.current=position.language;
@@ -226,6 +303,11 @@ export default function DetailsPage() {
   },[findNextEpisode,player.open,type]);
   const prepareEpisode=useCallback((season:number,episode:number,language:MovieLanguage=playbackLanguageRef.current,force=false)=>{
     if(!details)return Promise.resolve(false);
+    if(localAddonTV){
+      if(!seriesSources?.episodes.some(item=>item.season===season&&item.episode===episode&&item.language===language))return Promise.resolve(false);
+      return fetch(`/addon-local/resolve/tv/${id}/${season}/${episode}`).then(response=>response.ok).catch(()=>false);
+    }
+    if(localAddonTest&&type==="tv")return Promise.resolve(false);
     const key=`${id}:${season}:${episode}:${language}`,existing=warmRequests.current.get(key);
     if(!force&&existing&&existing.expires>Date.now())return existing.promise;
     const entry={promise:Promise.resolve(false) as Promise<boolean>,expires:Date.now()+300_000};
@@ -233,10 +315,11 @@ export default function DetailsPage() {
       .then(()=>true).catch(()=>{entry.expires=Date.now()+30_000;return false;});
     if(warmRequests.current.size>=24)warmRequests.current.delete(warmRequests.current.keys().next().value!);
     warmRequests.current.set(key,entry);return entry.promise;
-  },[details,id,absoluteEpisode]);
+  },[details,id,absoluteEpisode,localAddonTV,seriesSources]);
   useEffect(()=>{
     if(player.open||!details||details.id!==Number(id))return;
     if(type==="movie"){
+      if(localAddonMovie)return;
       if(!audioOptions?.some(option=>option.id==="pt"&&option.available))return;
       let active=true;
       void prepareMovieStream(Number(id),"pt").then(()=>{if(active&&audioOptions.some(option=>option.id==="en"&&option.available))return prepareMovieStream(Number(id),"en");}).catch(()=>{});
@@ -249,7 +332,7 @@ export default function DetailsPage() {
     const available=seriesSources.episodes.filter(e=>(e.season===season&&e.episode===episode)||(e.season===null&&e.episode===absolute));
     const language=previous?.language||(available.some(e=>e.language==="pt")?"pt":"en");
     void prepareEpisode(season,episode,language);
-  },[player.open,details,id,type,audioOptions,seriesSources,selectedSeason,absoluteEpisode,prepareEpisode]);
+  },[player.open,details,id,type,audioOptions,seriesSources,selectedSeason,absoluteEpisode,prepareEpisode,localAddonMovie]);
   const activeLanguage=savedProgress?.season===player.seasonNum&&savedProgress?.episode===player.episodeNum?savedProgress?.language||player.language||"pt":player.language||"pt";
   const nextNearEnd=!!savedProgress?.duration&&savedProgress.duration-(savedProgress.currentTime||0)<=120;
   useEffect(()=>{
@@ -302,6 +385,9 @@ export default function DetailsPage() {
   );
 
   const filteredSeasons = details.seasons?.filter((s) => s.season_number > 0) || [];
+  const sourceCheckReady = (!localAddonTest || localProbeResolvedKey === `${type}:${id}`)
+    && (!localAddonTV || seriesLookupResolvedKey === `${id}:addon`);
+  const addonTVUnavailable = localAddonTest && type === "tv" && localProbeResolvedKey === `${type}:${id}` && !localAddonTV;
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
@@ -312,7 +398,14 @@ export default function DetailsPage() {
       {/* Player Modal with Tabs */}
       {player.open && (
         <div className="fixed inset-0 z-[60] bg-black flex items-center justify-center">
-          <div className="w-full h-full">
+          {!sourceCheckReady ? <div role="status" aria-label="Preparando vídeo" className="flex h-full w-full items-center justify-center">
+            <button type="button" onClick={closePlayer} className="absolute left-5 top-5 rounded-full border border-white/20 p-3 text-white" aria-label="Voltar"><X size={20}/></button>
+            <Loader2 className="h-9 w-9 animate-spin text-primary" aria-hidden="true" />
+          </div> : localAddonTV && seriesLookupError ? <div role="alert" className="flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center text-white">
+            <button type="button" onClick={closePlayer} className="absolute left-5 top-5 rounded-full border border-white/20 p-3" aria-label="Voltar"><X size={20}/></button>
+            <p className="max-w-md text-lg font-semibold">{CONTENT_UNAVAILABLE_MESSAGE}</p>
+            <button type="button" onClick={()=>{setLocalProbeResolvedKey(null);setSeriesLookupResolvedKey(null);setSourceRetry(value=>value+1);}} className="rounded-full border border-white/25 px-5 py-2 text-sm hover:border-primary">Tentar novamente</button>
+          </div> : <div className="w-full h-full">
             <IPTVPlayer
               key={`${type}-${id}`}
               playbackKey={playerKey}
@@ -341,7 +434,7 @@ export default function DetailsPage() {
               nextEpisode={nextEpisode}
               nextPreparing={nextPreparing}
             />
-          </div>
+          </div>}
         </div>
       )}
 
@@ -387,8 +480,10 @@ export default function DetailsPage() {
             )}
 
             <div className="flex flex-wrap gap-4 z-30 relative items-center mt-6">
+              {addonTVUnavailable && <span role="status" className="rounded-full border border-white/20 bg-black/45 px-5 py-3 text-sm text-white/80">Indisponível no momento. Aguarde novas atualizações do catálogo.</span>}
+              {!addonTVUnavailable && availability!=="available" && <div className="flex flex-wrap items-center gap-3"><span role="status" className="rounded-full border border-white/25 bg-black/55 px-5 py-3 text-sm font-semibold text-white">{availability==="checking"?"Verificando disponibilidade…":"Em Breve na MOX"}</span>{availability==="upcoming"&&<button type="button" onClick={()=>refreshTitleAvailability(type!,Number(id))} className="rounded-full border border-white/25 px-4 py-2 text-sm text-white/80 hover:border-primary">Verificar novamente</button>}</div>}
               {/* Botão Assistir ou Continuar Assistindo (primeiro à esquerda) */}
-              {(() => {
+              {!addonTVUnavailable && availability==="available" && (() => {
                 const progress = savedProgress;
                 if (progress && !progress.completed && progress.progress < 100) {
                   return (
@@ -566,32 +661,7 @@ export default function DetailsPage() {
 
           {/* Episódios em Row Horizontal */}
           <div className="detail-episode-grid">
-            {episodes.map((ep) => (
-              <div
-                key={ep.id}
-                onClick={() => openPlayer(selectedSeason, ep.episode_number)}
-                role="button" tabIndex={0} onKeyDown={e=>{if(e.key==="Enter")openPlayer(selectedSeason,ep.episode_number);}} className="detail-episode-card group"
-              >
-                <div className="aspect-video relative bg-secondary">
-                  <img
-                    src={ep.still_path ? posterUrl(ep.still_path, "w500") : "/placeholder.svg"}
-                    alt={ep.name}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Play className="w-10 h-10 text-primary fill-current" />
-                  </div>
-                </div>
-                <div className="p-4">
-                  <h4 className="text-base font-bold truncate">
-                    E{ep.episode_number} - {ep.name}
-                  </h4>
-                  {ep.overview && (
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{ep.overview}</p>
-                  )}
-                </div>
-              </div>
-            ))}
+            {episodes.map((ep) => <AvailableEpisodeCard key={ep.id} episode={ep} titleId={Number(id)} season={selectedSeason} titleStatus={availability} onPlay={openPlayer} />)}
           </div>
         </div>
       )}

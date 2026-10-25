@@ -13,6 +13,7 @@ const categoryLabels: Record<string, string> = {
   doramas: "Doramas",
   novelas: "Novelas",
 };
+interface LocalNovela { tmdb_id: number }
 
 export default function CategoryPage() {
   const { category } = useParams<{ category: string }>();
@@ -26,6 +27,17 @@ function CategoryBrowser({category}:{category?:string}) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [localNovelas, setLocalNovelas] = useState<Set<number> | null>(null);
+
+  useEffect(() => {
+    if (category !== "novelas" || !import.meta.env.DEV) return;
+    const controller = new AbortController();
+    fetch("/addon-local/catalog/list?category=novelas&available=1", {signal:controller.signal})
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {if (!controller.signal.aborted && data) setLocalNovelas(new Set((data.items as LocalNovela[]).map(item => item.tmdb_id)));})
+      .catch(() => {});
+    return () => controller.abort();
+  }, [category]);
 
   const baseEndpoint = CATEGORIES[category as keyof typeof CATEGORIES];
   const endpoint=year&&baseEndpoint?(category==="movies"?`discover/movie?sort_by=popularity.desc&vote_count.gte=1000&primary_release_year=${year}`:category==="series"?`discover/tv?sort_by=vote_average.desc&vote_count.gte=1000&first_air_date_year=${year}`:`${baseEndpoint}&first_air_date_year=${year}`):baseEndpoint;
@@ -71,7 +83,7 @@ function CategoryBrowser({category}:{category?:string}) {
                 <div key={i} className="aspect-[2/3] rounded-lg bg-muted animate-shimmer bg-gradient-to-r from-muted via-surface-hover to-muted bg-[length:200%_100%]" />
               ))
             : items.filter(i => i.poster_path).map((item) => (
-<MediaCard key={item.id} item={item} type={mediaType} />
+<MediaCard key={item.id} item={item} type={mediaType} unavailable={category === "novelas" && localNovelas !== null && !localNovelas.has(item.id)} />
               ))}
         </div>
 

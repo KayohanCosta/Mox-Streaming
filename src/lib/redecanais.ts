@@ -1,8 +1,9 @@
 export const CONTENT_UNAVAILABLE_MESSAGE = "Indisponivel no momento Aguarde novas Atualizações de Catalogo";
 const unavailableCodes = new Set(["tmdb_not_mapped", "series_not_found", "episodes_not_found", "episode_unavailable", "language_unavailable", "item_not_found", "ambiguous_episode", "ambiguous_series", "series_list_required"]);
+const temporaryOriginMessage = "O serviço de vídeos está temporariamente indisponível. Tente novamente mais tarde.";
 export class PlaybackAPIError extends Error {
   constructor(public code: string, public status: number, message: string) {
-    super(unavailableCodes.has(code) ? CONTENT_UNAVAILABLE_MESSAGE : message);
+    super(code === "catalog_unavailable" ? temporaryOriginMessage : unavailableCodes.has(code) ? CONTENT_UNAVAILABLE_MESSAGE : message);
     this.name = "PlaybackAPIError";
   }
 }
@@ -26,6 +27,14 @@ const CATALOG_API = (import.meta.env.VITE_CATALOG_API_URL || API).replace(/\/$/,
 const prepared = new Map<string,{url:string;expires:number}>();
 function preparedURL(key:string) { const item=prepared.get(key);return item&&item.expires>Date.now()?item.url:undefined; }
 function remember(key:string,url:string) { if(prepared.size>64)prepared.delete(prepared.keys().next().value!);prepared.set(key,{url,expires:Date.now()+300_000});return url; }
+function validatedStreamPath(data: {delivery_mode?: string; media_url?: string; startup_cache_ready?: boolean}, expectedCloudPath: string, prepare: boolean) {
+  if (data.delivery_mode === "cloud_range_relay" && data.media_url === expectedCloudPath) return `${API}${expectedCloudPath}`;
+  if (data.delivery_mode !== "session_relay" || !data.media_url) throw new Error("A API não confirmou um endereço de vídeo válido.");
+  const url = new URL(data.media_url, window.location.origin);
+  if (!/^\/v1\/streams\/[a-f0-9]{32}$/.test(url.pathname) || url.search || url.hash) throw new Error("A API não retornou um endereço de vídeo válido.");
+  if (prepare && !data.startup_cache_ready) throw new Error("A preparação do vídeo ainda não terminou.");
+  return `${API}${url.pathname}`;
+}
 async function request(path: string, signal?: AbortSignal) {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -74,13 +83,11 @@ export async function resolveMovieStream(id: number, language: MovieLanguage = "
   const key=`movie:${movieId(id)}:${language}`;
   const cached=!prepare&&preparedURL(key);if(cached)return cached;
   const data = await request(`/v1/tmdb/movie/${movieId(id)}/stream?language=${language}${prepare?"&prepare=1":""}`, signal);
-  if (data.status !== "ready" || data.delivery_mode !== "session_relay" || !data.stream_preflight_validated || data.tmdb_id !== id || data.language !== language) {
+  if (data.status !== "ready" || !data.stream_preflight_validated || data.tmdb_id !== id || data.language !== language) {
     throw new Error("A API não confirmou a versão solicitada do filme.");
   }
-  const url = new URL(data.media_url, window.location.origin);
-  if (!/^\/v1\/streams\/[a-f0-9]{32}$/.test(url.pathname) || url.search || url.hash) throw new Error("A API não retornou um endereço de vídeo válido.");
-  if(prepare&&!data.startup_cache_ready)throw new Error("A preparação do vídeo ainda não terminou.");
-  return prepare?remember(key,`${API}${url.pathname}`):`${API}${url.pathname}`;
+  const url = validatedStreamPath(data, `/stream/movie/${id}`, prepare);
+  return prepare ? remember(key, url) : url;
 }
 
 export interface SeriesMetadata { title: string; original_title?: string; year?: string }
@@ -102,12 +109,10 @@ export async function resolveEpisodeStream(id: number, season: number, episode: 
   if(prepare)query.set("prepare","1");
   if (absoluteEpisode !== undefined) query.set("absolute_episode",String(absoluteEpisode));
   const data=await request(`/v1/tmdb/tv/${movieId(id)}/season/${season}/episode/${episode}/stream?${query}`,signal);
-  if (data.status!=="ready"||data.delivery_mode!=="session_relay"||!data.stream_preflight_validated||data.tmdb_id!==id||data.season!==season||data.episode!==episode||data.language!==language)
+  if (data.status!=="ready"||!data.stream_preflight_validated||data.tmdb_id!==id||data.season!==season||data.episode!==episode||data.language!==language)
     throw new Error("A API não confirmou o episódio solicitado.");
-  const url=new URL(data.media_url,window.location.origin);
-  if (!/^\/v1\/streams\/[a-f0-9]{32}$/.test(url.pathname)||url.search||url.hash) throw new Error("A API não retornou um vídeo válido.");
-  if(prepare&&!data.startup_cache_ready)throw new Error("A preparação do vídeo ainda não terminou.");
-  return prepare?remember(key,`${API}${url.pathname}`):`${API}${url.pathname}`;
+  const url=validatedStreamPath(data,`/stream/tv/${id}/${season}/${episode}`,prepare);
+  return prepare?remember(key,url):url;
 }
 
 const preparationRequests=new Map<string,Promise<string>>();

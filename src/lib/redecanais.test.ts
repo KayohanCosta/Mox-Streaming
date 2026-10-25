@@ -33,6 +33,13 @@ describe("RedeCanais integration", () => {
    await expect(resolveMovieStream(969681,"en")).rejects.toThrow();
   }
  });
+ it("accepts only the matching cloud range relay path",async()=>{
+  const response=(media_url:string)=>({ok:true,json:async()=>({status:"ready",delivery_mode:"cloud_range_relay",stream_preflight_validated:true,tmdb_id:969681,language:"pt",media_url})});
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue(response("/stream/movie/969681")));
+  await expect(resolveMovieStream(969681,"pt")).resolves.toBe("/redecanais/stream/movie/969681");
+  vi.stubGlobal("fetch",vi.fn().mockResolvedValue(response("/stream/movie/1")));
+  await expect(resolveMovieStream(969681,"pt")).rejects.toThrow();
+ });
  it("reports the origin's missing-language error",async()=>{
   vi.stubGlobal("fetch",vi.fn().mockResolvedValue({ok:false,json:async()=>({error:{message:"Versão indisponível"}})}));
   await expect(resolveMovieStream(969681,"en")).rejects.toThrow("Versão indisponível");
@@ -54,4 +61,8 @@ it('coalesces preparation when catalogue intent and the details page request the
  it("keeps infrastructure failure distinct from missing catalog content",async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,status:503,json:async()=>({error:{code:'playback_runtime_not_connected',message:'Serviço de reprodução não conectado.'}})}));
   await expect(resolveMovieStream(764952,'pt')).rejects.toThrow('Serviço de reprodução não conectado.');
+ });
+ it("shows a useful message when the origin catalog cannot be read",async()=>{
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,status:503,json:async()=>({error:{code:'catalog_unavailable',message:'A origem não liberou a leitura do catálogo. Tente novamente pelo fluxo normal.'}})}));
+  await expect(resolveMovieStream(764953,'pt')).rejects.toThrow('O serviço de vídeos está temporariamente indisponível. Tente novamente mais tarde.');
  });

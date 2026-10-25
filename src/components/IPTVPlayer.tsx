@@ -90,6 +90,7 @@ export default function IPTVPlayer({
   const playbackKey=providedKey || `${source}:${season || 0}:${episode || 0}`;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visibleError, setVisibleError] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -137,6 +138,14 @@ export default function IPTVPlayer({
     volumeRef.current = volume;
     mutedRef.current = isMuted;
   }, [volume, isMuted]);
+
+  useEffect(() => {
+    if (!error) { setVisibleError(null); return; }
+    if (liveMode) { setVisibleError(error); return; }
+    setVisibleError(null);
+    const timer = setTimeout(() => setVisibleError(error), 900);
+    return () => clearTimeout(timer);
+  }, [error, liveMode]);
 
   const clearHideTimeout = useCallback(() => {
     if (timeoutRef.current) {
@@ -321,7 +330,12 @@ export default function IPTVPlayer({
         const { default: HlsPlayer } = await import("hls.js/light");
         if (disposed) return;
         if (HlsPlayer.isSupported()) {
-          hls = new HlsPlayer();
+          hls = new HlsPlayer({
+            maxBufferLength: liveMode ? 30 : 45,
+            maxMaxBufferLength: liveMode ? 60 : 90,
+            backBufferLength: liveMode ? 15 : 30,
+            maxBufferHole: 0.5,
+          });
           hls.on(HlsPlayer.Events.MEDIA_ATTACHED, () => hls?.loadSource(streamUrl));
           hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
             if (!data.fatal) return;
@@ -604,9 +618,9 @@ export default function IPTVPlayer({
             playsInline
           />
         )}
-        {error&&<div role="alert" className="flex flex-col items-center gap-3"><AlertTriangle className="w-10 h-10 text-red-400"/><p className="max-w-sm px-5 text-center text-sm text-white">{error}</p></div>}
+        {visibleError&&<div role="alert" className="flex flex-col items-center gap-3"><AlertTriangle className="w-10 h-10 text-red-400"/><p className="max-w-sm px-5 text-center text-sm text-white">{visibleError}</p></div>}
       </div>
-      {showSpinner&&!error&&<div role="status" aria-label="Carregando vídeo" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary"/><span className="sr-only">Carregando vídeo</span></div>}
+      {((showSpinner&&!error)||(!!error&&!visibleError))&&<div role="status" aria-label="Carregando vídeo" className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary"/><span className="sr-only">Carregando vídeo</span></div>}
 
       {/* CENTER CLICK AREA */}
       {streamUrl && (
